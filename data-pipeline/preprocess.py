@@ -143,13 +143,15 @@ class MedicalTextFeatureEngine:
             if col in df_processed.columns:
                 print(f"Processing {col}...")
                 df_processed[f'{col}_cleaned'] = df_processed[col].apply(clean_medical_text)
-                
-                # Create combined text if we have both
-                if col == 'transcription' and 'description' in text_cols:
-                    df_processed['combined_text'] = (
-                        df_processed['description_cleaned'].fillna('') + ' ' + 
-                        df_processed['transcription_cleaned'].fillna('')
-                    ).str.strip()
+        
+        # Create combined text AFTER processing all columns
+        if ('transcription_cleaned' in df_processed.columns and 
+            'description_cleaned' in df_processed.columns):
+            print("Creating combined text...")
+            df_processed['combined_text'] = (
+                df_processed['description_cleaned'].fillna('') + ' ' + 
+                df_processed['transcription_cleaned'].fillna('')
+            ).str.strip()
         
         print(f"✅ Text preprocessing complete")
         return df_processed
