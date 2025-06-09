@@ -267,3 +267,17 @@ notebooks/
 # Models
 models/
 
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfvars
+**/.terraformrc
+**/terraform.rc
+**/terraform-provider-*
+**/terraform-provider-*.zip
+
+# Keep terraform.tfvars.example for documentation
+!**/terraform.tfvars.example
+
