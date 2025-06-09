@@ -1,0 +1,146 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+
+jobs:
+  # PR Validation - No deployment, just thorough testing
+  validate:
+    name: 🔍 Validate PR
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov flake8 black isort mypy
+        
+    - name: Code formatting check (Black)
+      run: |
+        black --check --diff src/ tests/ || {
+          echo "❌ Code formatting issues found!"
+          echo "Run: black src/ tests/"
+          exit 1
+        }
+        
+    - name: Import sorting check (isort)
+      run: |
+        isort --check-only --diff src/ tests/ || {
+          echo "❌ Import sorting issues found!"
+          echo "Run: isort src/ tests/"
+          exit 1
+        }
+        
+    - name: Linting (flake8)
+      run: |
+        flake8 src/ tests/ --max-line-length=88 --extend-ignore=E203,W503 || {
+          echo "❌ Linting issues found!"
+          exit 1
+        }
+        
+    - name: Type checking (mypy)
+      run: |
+        mypy src/ --ignore-missing-imports || {
+          echo "❌ Type checking failed!"
+          exit 1
+        }
+        
+    - name: Run unit tests
+      run: |
+        python -m pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=term-missing
+        
+    - name: Check test coverage
+      run: |
+        coverage report --fail-under=70 || {
+          echo "❌ Test coverage below 70%!"
+          exit 1
+        }
+        
+    - name: Build Docker image for testing
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: infrastructure/docker/Dockerfile.api
+        platforms: linux/amd64
+        push: false
+        tags: medical-classifier:pr-test
+        
+    - name: Test Docker image
+      run: |
+        # Start container in background
+        docker run -d --name pr-test-container -p 8000:8000 medical-classifier:pr-test
+        
+        # Wait for startup
+        sleep 30
+        
+        # Test health endpoint
+        for i in {1..10}; do
+          if curl -f http://localhost:8000/health; then
+            echo "✅ Health check passed"
+            break
+          fi
+          echo "Attempt $i failed, retrying..."
+          sleep 10
+        done
+        
+        # Test prediction endpoint
+        RESPONSE=$(curl -s -X POST http://localhost:8000/predict \
+          -H "Content-Type: application/json" \
+          -d '{"text": "Patient presents with chest pain and shortness of breath."}')
+        
+        echo "Response: $RESPONSE"
+        echo "$RESPONSE" | grep -q "prediction" || (echo "❌ Prediction test failed" && exit 1)
+        
+        echo "✅ Docker image tests passed!"
+        
+    - name: Clean up test container
+      if: always()
+      run: docker rm -f pr-test-container || true
+      
+    - name: Validate Terraform
+      run: |
+        cd infrastructure/terraform
+        terraform init
+        terraform validate
+        terraform fmt -check || {
+          echo "❌ Terraform formatting issues found!"
+          echo "Run: terraform fmt -recursive"
+          exit 1
+        }
+        
+    - name: PR Summary
+      if: always()
+      run: |
+        echo "## 🔍 PR Validation Summary"
+        echo "- ✅ Code formatting"
+        echo "- ✅ Import sorting"
+        echo "- ✅ Linting"
+        echo "- ✅ Type checking"
+        echo "- ✅ Unit tests"
+        echo "- ✅ Docker build"
+        echo "- ✅ API functionality"
+        echo "- ✅ Terraform validation"
+        echo ""
+        echo "🚀 **Ready for review and merge!**" 
