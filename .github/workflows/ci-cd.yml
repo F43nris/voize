@@ -118,6 +118,14 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       
+    - name: Create data directory and dummy model files for Docker build
+      run: |
+        mkdir -p data
+        # Create minimal dummy files just for Docker COPY to succeed
+        echo "# CI/CD dummy model file" > data/optimized_multinomial_nb.pkl
+        echo "# CI/CD dummy feature engine file" > data/feature_engine.pkl
+        echo "Created dummy model files for Docker build (production will download real models)"
+        
     - name: Build Docker image for testing
       uses: docker/build-push-action@v5
       with:
@@ -185,6 +193,14 @@ jobs:
       
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+      
+    - name: Create data directory and dummy model files for Docker build
+      run: |
+        mkdir -p data
+        # Create minimal dummy files just for Docker COPY to succeed
+        echo "# CI/CD dummy model file" > data/optimized_multinomial_nb.pkl
+        echo "# CI/CD dummy feature engine file" > data/feature_engine.pkl
+        echo "Created dummy model files for Docker build (production will download real models)"
       
     - name: Build and push Docker image
       id: push
