@@ -295,6 +295,18 @@ jobs:
         # Try to import the existing repository, ignore error if already imported
         terraform import google_artifact_registry_repository.ml_models projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/repositories/ml-models || echo "Repository already imported or doesn't exist"
         
+    - name: Import existing Cloud Run service if needed
+      run: |
+        cd infrastructure/terraform
+        # Try to import the existing Cloud Run service, ignore error if already imported
+        terraform import module.cloud_run.google_cloud_run_v2_service.ml_api projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/medical-classifier-api || echo "Cloud Run service already imported or doesn't exist"
+        
+    - name: Import existing IAM binding if needed
+      run: |
+        cd infrastructure/terraform
+        # Try to import the existing IAM binding, ignore error if already imported
+        terraform import module.cloud_run.google_cloud_run_service_iam_member.public_access projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/medical-classifier-api roles/run.invoker allUsers || echo "IAM binding already imported or doesn't exist"
+        
     - name: Terraform Plan
       run: |
         cd infrastructure/terraform
