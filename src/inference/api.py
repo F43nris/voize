@@ -1,18 +1,22 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, validator
 import pickle
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import logging
 from pathlib import Path
 import os
 import sys
 import time
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Import the feature engine class and make it available for pickle
 from src.inference.feature_engine import MedicalTextFeatureEngine
+
+# Import monitoring components
+from src.monitoring.prediction_logger import PredictionLogger
+from src.monitoring.business_metrics import BusinessMetricsTracker
 
 # Monkey patch for pickle deserialization - make the class available 
 # in the module namespace that pickle expects
@@ -51,7 +55,7 @@ for key, value in os.environ.items():
 # Initialize FastAPI app
 app = FastAPI(
     title="Medical Document Classifier API",
-    description="ML API for classifying medical documents using trained Multinomial Naive Bayes model",
+    description="ML API for classifying medical documents using trained Multinomial Naive Bayes model with comprehensive monitoring",
     version="1.0.0"
 )
 
@@ -59,6 +63,15 @@ app = FastAPI(
 model = None
 feature_engine = None
 startup_start_time = time.time()
+
+# Initialize monitoring components
+prediction_logger = PredictionLogger(model_version="1.0.0")
+business_metrics = BusinessMetricsTracker(window_minutes=60)
+
+logger.info("📊 Monitoring systems initialized")
+logger.info(f"   - Prediction logger: {type(prediction_logger).__name__}")
+logger.info(f"   - Business metrics tracker: {type(business_metrics).__name__}")
+
 model_load_status = {
     "started": False,
     "completed": False,
@@ -82,11 +95,72 @@ class PredictionResponse(BaseModel):
     prediction: str
     confidence: float
     top_predictions: List[dict]
+    request_id: Optional[str] = None  # Add request ID for tracking
 
 class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
     feature_engine_loaded: bool
+    uptime_seconds: float
+    model_version: str
+    performance_summary: Optional[Dict[str, Any]] = None
+
+class MonitoringResponse(BaseModel):
+    """Response model for monitoring endpoints."""
+    timestamp: str
+    data: Dict[str, Any]
+
+# Middleware for request tracking
+@app.middleware("http")
+async def track_requests(request: Request, call_next):
+    """Middleware to track all requests for business metrics."""
+    start_time = time.time()
+    
+    # Get request info
+    user_agent = request.headers.get("user-agent")
+    
+    # Handle ASGI scope for getting client IP
+    client_ip = None
+    if hasattr(request, "client") and request.client:
+        client_ip = request.client.host
+    
+    try:
+        response = await call_next(request)
+        
+        # Calculate response time
+        response_time_ms = (time.time() - start_time) * 1000
+        
+        # Estimate response size (basic)
+        response_size = getattr(response, 'headers', {}).get('content-length', 0)
+        if isinstance(response_size, str):
+            response_size = int(response_size) if response_size.isdigit() else 0
+        
+        # Track the request
+        business_metrics.track_request(
+            endpoint=str(request.url.path),
+            method=request.method,
+            status_code=response.status_code,
+            response_time_ms=response_time_ms,
+            request_size_bytes=int(request.headers.get('content-length', 0)) if request.headers.get('content-length', '0').isdigit() else 0,
+            response_size_bytes=response_size,
+            user_agent=user_agent,
+            ip_address=client_ip
+        )
+        
+        return response
+        
+    except Exception as e:
+        # Track errors
+        response_time_ms = (time.time() - start_time) * 1000
+        business_metrics.track_request(
+            endpoint=str(request.url.path),
+            method=request.method,
+            status_code=500,
+            response_time_ms=response_time_ms,
+            user_agent=user_agent,
+            ip_address=client_ip
+        )
+        raise e
 
 def load_model():
     """Load the trained model and feature engine with retry logic and detailed logging"""
@@ -265,23 +339,30 @@ async def startup_event():
         logger.error("❌ STARTUP FAILED - Model loading unsuccessful")
         # Don't exit here - let health checks handle the failure
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Enhanced health check endpoint with detailed status information"""
+    """Enhanced health check endpoint with detailed status information and monitoring metrics"""
     check_start_time = time.time()
     logger.info("🏥 Health check requested")
     
     model_loaded = model is not None
     feature_engine_loaded = feature_engine is not None
     
-    # Get detailed status
+    # Get performance summary from prediction logger
+    performance_summary = prediction_logger.get_performance_summary()
+    
+    # Get uptime
     uptime = time.time() - startup_start_time
+    
+    # Get detailed status
     health_status = {
         "timestamp": datetime.now().isoformat(),
         "uptime_seconds": round(uptime, 2),
         "model_loaded": model_loaded,
         "feature_engine_loaded": feature_engine_loaded,
+        "model_version": "1.0.0",
         "load_status": dict(model_load_status),  # Copy the status
+        "performance_summary": performance_summary,
         "system_info": {}
     }
     
@@ -297,7 +378,7 @@ async def health_check():
     except:
         pass
     
-    logger.info(f"Health status: {json.dumps(health_status, indent=2)}")
+    logger.info(f"Health status: {json.dumps({k: v for k, v in health_status.items() if k != 'performance_summary'}, indent=2)}")
     
     # If models aren't loaded yet, try to load them
     if not model_loaded or not feature_engine_loaded:
@@ -316,10 +397,14 @@ async def health_check():
     # Return appropriate status
     if model_loaded and feature_engine_loaded:
         logger.info(f"✅ Health check PASSED in {check_time:.3f}s")
-        return {
-            "status": "healthy",
-            **health_status
-        }
+        return HealthResponse(
+            status="healthy",
+            model_loaded=model_loaded,
+            feature_engine_loaded=feature_engine_loaded,
+            uptime_seconds=health_status["uptime_seconds"],
+            model_version=health_status["model_version"],
+            performance_summary=performance_summary
+        )
     else:
         # Still loading or failed to load
         logger.warning(f"⚠️  Health check FAILED in {check_time:.3f}s - models not ready")
@@ -334,20 +419,31 @@ async def health_check():
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
-    """Make a prediction on the input text"""
+    """Make a prediction on the input text with comprehensive monitoring and logging"""
     
     # Check if model is loaded
     if model is None or feature_engine is None:
+        prediction_logger.log_error(
+            input_text=request.text,
+            error_message="Model not loaded",
+            error_type="MODEL_NOT_LOADED"
+        )
         raise HTTPException(
             status_code=503, 
             detail="Model not loaded. Please check server logs."
         )
     
+    # Start timing
+    total_start_time = time.time()
+    
     try:
-        # Transform text using feature engine
+        # Preprocessing phase
+        preprocessing_start = time.time()
         text_features = feature_engine.transform([request.text])
+        preprocessing_time_ms = (time.time() - preprocessing_start) * 1000
         
-        # Make prediction
+        # Prediction phase
+        prediction_start = time.time()
         prediction_encoded = model.predict(text_features)[0]
         
         # Decode the prediction back to class name
@@ -355,6 +451,7 @@ async def predict(request: PredictionRequest):
         
         # Get prediction probabilities for confidence and top predictions
         probabilities = model.predict_proba(text_features)[0]
+        prediction_time_ms = (time.time() - prediction_start) * 1000
         
         # Get class names from label encoder
         class_names = feature_engine.label_encoder.classes_
@@ -372,31 +469,290 @@ async def predict(request: PredictionRequest):
         # Get confidence for the predicted class
         confidence = float(probabilities[prediction_encoded])
         
+        # Log the prediction with comprehensive metadata
+        request_id = prediction_logger.log_prediction(
+            input_text=request.text,
+            prediction=prediction,
+            confidence=confidence,
+            top_predictions=top_predictions,
+            preprocessing_time_ms=preprocessing_time_ms,
+            prediction_time_ms=prediction_time_ms,
+            feature_vector=text_features.toarray()[0] if hasattr(text_features, 'toarray') else None,
+            feature_engine_version="1.0.0"
+        )
+        
+        total_time_ms = (time.time() - total_start_time) * 1000
+        
+        logger.info(f"✅ Prediction completed - ID: {request_id}, Time: {total_time_ms:.1f}ms, Confidence: {confidence:.3f}")
+        
         return PredictionResponse(
             prediction=prediction,
             confidence=confidence,
-            top_predictions=top_predictions
+            top_predictions=top_predictions,
+            request_id=request_id
         )
         
     except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
+        total_time_ms = (time.time() - total_start_time) * 1000
+        error_msg = str(e)
+        
+        logger.error(f"❌ Prediction error: {error_msg} (Time: {total_time_ms:.1f}ms)")
+        
+        # Log the error
+        prediction_logger.log_error(
+            input_text=request.text,
+            error_message=error_msg,
+            error_type="PREDICTION_ERROR"
+        )
+        
         raise HTTPException(
             status_code=500,
-            detail=f"Prediction failed: {str(e)}"
+            detail=f"Prediction failed: {error_msg}"
         )
+
+# New monitoring endpoints
+@app.get("/monitoring/metrics", response_model=MonitoringResponse)
+async def get_business_metrics():
+    """Get current business metrics and performance data"""
+    try:
+        metrics = business_metrics.get_current_metrics()
+        return MonitoringResponse(
+            timestamp=metrics["timestamp"],
+            data=metrics
+        )
+    except Exception as e:
+        logger.error(f"Error getting business metrics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve metrics")
+
+@app.get("/monitoring/performance", response_model=MonitoringResponse)
+async def get_performance_summary():
+    """Get detailed performance summary from prediction logger"""
+    try:
+        performance = prediction_logger.get_performance_summary()
+        return MonitoringResponse(
+            timestamp=performance["timestamp"],
+            data=performance
+        )
+    except Exception as e:
+        logger.error(f"Error getting performance summary: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve performance data")
+
+@app.get("/monitoring/drift", response_model=MonitoringResponse)
+async def get_drift_analysis(window_size: int = 100):
+    """Get model drift detection analysis"""
+    try:
+        drift_analysis = prediction_logger.detect_drift(window_size=window_size)
+        return MonitoringResponse(
+            timestamp=drift_analysis.get("timestamp", datetime.now().isoformat()),
+            data=drift_analysis
+        )
+    except Exception as e:
+        logger.error(f"Error getting drift analysis: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve drift analysis")
+
+@app.get("/monitoring/errors", response_model=MonitoringResponse)
+async def get_error_summary(hours: int = 24):
+    """Get error summary for the specified time period"""
+    try:
+        error_summary = business_metrics.get_error_summary(hours=hours)
+        return MonitoringResponse(
+            timestamp=error_summary["timestamp"],
+            data=error_summary
+        )
+    except Exception as e:
+        logger.error(f"Error getting error summary: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve error summary")
+
+@app.get("/monitoring/anomalies", response_model=MonitoringResponse)
+async def get_anomaly_detection():
+    """Get current anomaly detection results"""
+    try:
+        anomalies = business_metrics.detect_anomalies()
+        return MonitoringResponse(
+            timestamp=anomalies["timestamp"],
+            data=anomalies
+        )
+    except Exception as e:
+        logger.error(f"Error getting anomaly detection: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve anomaly detection")
+
+@app.get("/monitoring/trends", response_model=MonitoringResponse)
+async def get_hourly_trends(hours: int = 24):
+    """Get hourly trends for requests, errors, and performance"""
+    try:
+        trends = business_metrics.get_hourly_trends(hours=hours)
+        return MonitoringResponse(
+            timestamp=trends["timestamp"],
+            data=trends
+        )
+    except Exception as e:
+        logger.error(f"Error getting trends: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve trends")
+
+@app.get("/monitoring/endpoint/{endpoint_name}", response_model=MonitoringResponse)
+async def get_endpoint_metrics(endpoint_name: str):
+    """Get metrics for a specific endpoint"""
+    try:
+        # URL decode the endpoint name
+        import urllib.parse
+        decoded_endpoint = urllib.parse.unquote(endpoint_name)
+        if not decoded_endpoint.startswith('/'):
+            decoded_endpoint = '/' + decoded_endpoint
+            
+        metrics = business_metrics.get_endpoint_metrics(decoded_endpoint)
+        return MonitoringResponse(
+            timestamp=metrics["timestamp"],
+            data=metrics
+        )
+    except Exception as e:
+        logger.error(f"Error getting endpoint metrics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve endpoint metrics")
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
-    return {
-        "message": "Medical Document Classifier API",
-        "version": "1.0.0",
-        "endpoints": {
-            "health": "/health",
-            "predict": "/predict",
-            "docs": "/docs"
-        }
+    """Root endpoint with comprehensive API information and health summary"""
+    uptime = time.time() - startup_start_time
+    model_loaded = model is not None
+    feature_engine_loaded = feature_engine is not None
+    
+    # Quick health summary
+    health_summary = {
+        "api_status": "operational" if (model_loaded and feature_engine_loaded) else "degraded",
+        "uptime_seconds": round(uptime, 2),
+        "model_ready": model_loaded and feature_engine_loaded
     }
+    
+    # Get basic metrics if available
+    try:
+        current_metrics = business_metrics.get_current_metrics()["metrics"]
+        health_summary.update({
+            "total_requests": current_metrics.get("total_requests", 0),
+            "requests_per_minute": round(current_metrics.get("requests_per_minute", 0), 2),
+            "error_rate_percent": round(current_metrics.get("error_rate_percent", 0), 2),
+            "avg_response_time_ms": round(current_metrics.get("avg_response_time_ms", 0), 1)
+        })
+    except:
+        pass
+    
+    return {
+        "message": "Medical Document Classifier API with Production Monitoring",
+        "version": "1.0.0",
+        "model_version": "1.0.0",
+        "health_summary": health_summary,
+        "endpoints": {
+            "health": "/health - Detailed health check with monitoring data",
+            "predict": "/predict - Make predictions with comprehensive logging",
+            "monitoring": {
+                "metrics": "/monitoring/metrics - Business metrics and KPIs",
+                "performance": "/monitoring/performance - Model performance summary",
+                "drift": "/monitoring/drift?window_size=100 - Model drift detection",
+                "errors": "/monitoring/errors?hours=24 - Error analysis",
+                "anomalies": "/monitoring/anomalies - Real-time anomaly detection",
+                "trends": "/monitoring/trends?hours=24 - Hourly performance trends",
+                "endpoint_metrics": "/monitoring/endpoint/{endpoint_name} - Per-endpoint metrics"
+            },
+            "docs": "/docs - Interactive API documentation"
+        },
+        "monitoring_features": [
+            "Real-time prediction logging with drift detection",
+            "Business metrics tracking (volume, latency, errors)",
+            "Performance monitoring with percentiles",
+            "Anomaly detection and alerting",
+            "Request-level tracing and debugging",
+            "Model staleness monitoring",
+            "System resource tracking"
+        ]
+    }
+
+# Model staleness monitoring utility
+def check_model_staleness() -> Dict[str, Any]:
+    """Check if the model is getting stale based on usage patterns and age"""
+    current_time = datetime.now(timezone.utc)
+    
+    # Model age since loading
+    model_loaded_time = datetime.fromisoformat(prediction_logger.model_loaded_at.replace('Z', '+00:00'))
+    model_age_hours = (current_time - model_loaded_time).total_seconds() / 3600
+    
+    # Get recent prediction activity
+    performance_stats = prediction_logger.get_performance_summary()
+    total_predictions = performance_stats["performance_stats"]["total_predictions"]
+    
+    # Check for staleness indicators
+    staleness_alerts = []
+    
+    # Model is very old (> 7 days)
+    if model_age_hours > 168:  # 7 days
+        staleness_alerts.append({
+            "type": "MODEL_AGE_HIGH",
+            "severity": "HIGH" if model_age_hours > 720 else "MEDIUM",  # 30 days = HIGH
+            "message": f"Model is {model_age_hours:.1f} hours old (threshold: 168 hours)",
+            "value": model_age_hours
+        })
+    
+    # Very low prediction volume (potential data drift or service not being used)
+    recent_metrics = business_metrics.get_current_metrics()["metrics"]
+    requests_per_minute = recent_metrics.get("requests_per_minute", 0)
+    
+    if requests_per_minute < 0.1 and model_age_hours > 1:  # Less than 6 requests per hour after 1 hour
+        staleness_alerts.append({
+            "type": "LOW_USAGE_VOLUME",
+            "severity": "MEDIUM",
+            "message": f"Very low prediction volume: {requests_per_minute:.2f} req/min",
+            "value": requests_per_minute
+        })
+    
+    # Check for confidence degradation over time
+    if len(prediction_logger.recent_predictions) >= 50:
+        recent_confidences = [p["confidence"] for p in prediction_logger.recent_predictions[-50:]]
+        avg_recent_confidence = sum(recent_confidences) / len(recent_confidences)
+        
+        if avg_recent_confidence < 0.6:
+            staleness_alerts.append({
+                "type": "CONFIDENCE_DEGRADATION",
+                "severity": "HIGH" if avg_recent_confidence < 0.5 else "MEDIUM",
+                "message": f"Average confidence dropping: {avg_recent_confidence:.3f} (threshold: 0.6)",
+                "value": avg_recent_confidence
+            })
+    
+    return {
+        "model_age_hours": model_age_hours,
+        "model_loaded_at": prediction_logger.model_loaded_at,
+        "total_predictions": total_predictions,
+        "staleness_alerts": staleness_alerts,
+        "staleness_score": len(staleness_alerts),
+        "recommendation": _get_staleness_recommendation(staleness_alerts),
+        "timestamp": current_time.isoformat()
+    }
+
+def _get_staleness_recommendation(alerts: List[Dict]) -> str:
+    """Get recommendation based on staleness alerts"""
+    if not alerts:
+        return "Model is fresh and performing well"
+    
+    high_severity_count = sum(1 for alert in alerts if alert["severity"] == "HIGH")
+    medium_severity_count = sum(1 for alert in alerts if alert["severity"] == "MEDIUM")
+    
+    if high_severity_count >= 2:
+        return "URGENT: Consider retraining model immediately with fresh data"
+    elif high_severity_count >= 1:
+        return "Consider retraining model with recent data within 24-48 hours"
+    elif medium_severity_count >= 2:
+        return "Monitor closely and consider retraining within 1 week"
+    else:
+        return "Monitor model performance and consider retraining schedule"
+
+@app.get("/monitoring/staleness", response_model=MonitoringResponse)
+async def get_model_staleness():
+    """Get model staleness analysis and recommendations"""
+    try:
+        staleness_data = check_model_staleness()
+        return MonitoringResponse(
+            timestamp=staleness_data["timestamp"],
+            data=staleness_data
+        )
+    except Exception as e:
+        logger.error(f"Error getting model staleness: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve staleness analysis")
 
 if __name__ == "__main__":
     import uvicorn
