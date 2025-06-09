@@ -289,6 +289,12 @@ jobs:
         cd infrastructure/terraform
         terraform init
         
+    - name: Import existing repository if needed
+      run: |
+        cd infrastructure/terraform
+        # Try to import the existing repository, ignore error if already imported
+        terraform import google_artifact_registry_repository.ml_models projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/repositories/ml-models || echo "Repository already imported or doesn't exist"
+        
     - name: Terraform Plan
       run: |
         cd infrastructure/terraform
