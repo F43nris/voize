@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -148,12 +148,12 @@ jobs:
       if: always()
       run: docker rm -f test-container || true
 
-  # Job 4: Build & Push to Production (only on main branch)
+  # Job 4: Build & Push to Production (only on master branch)
   build-prod:
     name: 🚀 Build & Push Production Image
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     outputs:
       image-url: ${{ steps.push.outputs.image-url }}
     
@@ -199,7 +199,7 @@ jobs:
     name: 🏗️ Deploy Infrastructure
     runs-on: ubuntu-latest
     needs: build-prod
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     outputs:
       service-url: ${{ steps.deploy.outputs.service-url }}
     
@@ -255,7 +255,7 @@ jobs:
     name: 🧪 Integration Tests
     runs-on: ubuntu-latest
     needs: deploy
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     
     steps:
     - name: Checkout code
@@ -309,7 +309,7 @@ jobs:
     name: ⚡ Performance Test
     runs-on: ubuntu-latest
     needs: integration-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     
     steps:
     - name: Checkout code
@@ -364,7 +364,7 @@ jobs:
     name: 📢 Notify Deployment
     runs-on: ubuntu-latest
     needs: [deploy, integration-test, performance-test]
-    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: always() && github.ref == 'refs/heads/master' && github.event_name == 'push'
     
     steps:
     - name: Deployment Success Notification
