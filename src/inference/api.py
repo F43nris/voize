@@ -28,7 +28,7 @@ except ImportError:
     GCS_AVAILABLE = False
     print("⚠️  Google Cloud Storage client not available - using local files only")
 
-# Monkey patch for pickle deserialization - make the class available
+# Monkey patch for pickle deserialization - make the class available 
 # in the module namespace that pickle expects
 sys.modules["__main__"].MedicalTextFeatureEngine = MedicalTextFeatureEngine
 
@@ -46,7 +46,7 @@ import logging
 cloud_handler = logging.StreamHandler()
 cloud_handler.setFormatter(
     logging.Formatter(
-        '{"timestamp": "%(asctime)s", "severity": "%(levelname)s", "logger": "%(name)s", "message": "%(message)s"}'
+    '{"timestamp": "%(asctime)s", "severity": "%(levelname)s", "logger": "%(name)s", "message": "%(message)s"}'
     )
 )
 logger.addHandler(cloud_handler)
@@ -98,7 +98,7 @@ model_load_status = {
 # Pydantic models for request/response
 class PredictionRequest(BaseModel):
     text: str
-
+    
     @validator("text")
     def text_must_not_be_empty(cls, v):
         if not v or not v.strip():
@@ -253,12 +253,12 @@ def download_models_from_cloud():
 def load_model():
     """Load the trained model and feature engine with retry logic and detailed logging"""
     global model, feature_engine, model_load_status
-
+    
     load_start_time = time.time()
     model_load_status["started"] = True
     model_load_status["last_attempt_time"] = datetime.now().isoformat()
     model_load_status["attempts"] += 1
-
+    
     logger.info("🔄 Starting model loading process...")
     logger.info(f"Attempt #{model_load_status['attempts']}")
     
@@ -302,21 +302,21 @@ def load_model():
     cloud_download_success = download_models_from_cloud()
     if not cloud_download_success:
         logger.warning("⚠️  Cloud model download failed, proceeding with local files")
-
+    
     max_retries = 3
     retry_delay = 5  # seconds
-
+    
     for attempt in range(max_retries):
         attempt_start_time = time.time()
         try:
             logger.info(
                 f"📁 ATTEMPT {attempt + 1}/{max_retries} - File system inspection"
             )
-
+            
             # Log current working directory and file structure for debugging
             current_dir = os.getcwd()
             logger.info(f"Current working directory: {current_dir}")
-
+            
             # List contents of current directory with detailed info
             if os.path.exists("."):
                 contents = []
@@ -328,7 +328,7 @@ def load_model():
                         size = os.path.getsize(item_path)
                         contents.append(f"{item} ({size} bytes)")
                 logger.info(f"Root directory contents: {contents}")
-
+            
             # Check if data directory exists with detailed info
             if os.path.exists("data"):
                 data_contents = []
@@ -341,7 +341,7 @@ def load_model():
                         data_contents.append(f"{item} ({size:,} bytes)")
                     else:
                         data_contents.append(f"{item}/ (directory)")
-
+                
                 logger.info(f"Data directory contents: {data_contents}")
                 logger.info(
                     f"Total data directory size: {total_size:,} bytes ({total_size/(1024*1024):.2f} MB)"
@@ -349,15 +349,15 @@ def load_model():
             else:
                 logger.error("❌ Data directory does not exist!")
                 raise FileNotFoundError("Data directory not found")
-
+            
             # Get model paths and check them
             model_path = Path("data/optimized_multinomial_nb.pkl")
             feature_engine_path = Path("data/feature_engine.pkl")
-
+            
             logger.info(f"🔍 Checking model files:")
             logger.info(f"  Model path: {model_path.absolute()}")
             logger.info(f"  Feature engine path: {feature_engine_path.absolute()}")
-
+            
             # Detailed file checks
             if not model_path.exists():
                 logger.error(f"❌ Model file not found: {model_path.absolute()}")
@@ -369,7 +369,7 @@ def load_model():
                 logger.info(
                     f"✅ Model file found: {model_size:,} bytes ({model_size/(1024*1024):.2f} MB)"
                 )
-
+                
             if not feature_engine_path.exists():
                 logger.error(
                     f"❌ Feature engine file not found: {feature_engine_path.absolute()}"
@@ -382,7 +382,7 @@ def load_model():
                 logger.info(
                     f"✅ Feature engine file found: {fe_size:,} bytes ({fe_size/(1024*1024):.2f} MB)"
                 )
-
+            
             # Load model with timing
             logger.info("📦 Loading model...")
             model_load_start = time.time()
@@ -395,7 +395,7 @@ def load_model():
             logger.info(f"   Model type: {type(model)}")
             if hasattr(model, "classes_"):
                 logger.info(f"   Model classes: {len(model.classes_)} classes")
-
+            
             # Load feature engine with timing
             logger.info("🔧 Loading feature engine...")
             fe_load_start = time.time()
@@ -411,7 +411,7 @@ def load_model():
                     logger.info(
                         f"   Label encoder classes: {len(feature_engine.label_encoder.classes_)}"
                     )
-
+            
             # Test the models quickly
             logger.info("🧪 Testing models with sample data...")
             test_text = ["Patient presents with chest pain"]
@@ -425,27 +425,27 @@ def load_model():
             except Exception as test_error:
                 logger.error(f"❌ Model test failed: {str(test_error)}")
                 raise
-
+            
             total_load_time = time.time() - load_start_time
             model_load_status["completed"] = True
             model_load_status["load_duration"] = total_load_time
             model_load_status["error"] = None
-
+            
             logger.info("🎉 MODEL LOADING COMPLETED SUCCESSFULLY!")
             logger.info(f"   Total loading time: {total_load_time:.2f} seconds")
             logger.info(f"   Model loading time: {model_load_time:.2f} seconds")
             logger.info(f"   Feature engine loading time: {fe_load_time:.2f} seconds")
-
+            
             return True
-
+            
         except Exception as e:
             attempt_time = time.time() - attempt_start_time
             error_msg = f"Attempt {attempt + 1}/{max_retries} failed after {attempt_time:.2f}s: {str(e)}"
             logger.error(f"❌ {error_msg}")
             logger.error(f"Exception details:", exc_info=True)
-
+            
             model_load_status["error"] = str(e)
-
+            
             if attempt < max_retries - 1:
                 logger.info(f"⏳ Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
@@ -454,7 +454,7 @@ def load_model():
                 logger.error(f"💥 ALL ATTEMPTS FAILED after {total_time:.2f} seconds")
                 model_load_status["completed"] = False
                 return False
-
+    
     return False
 
 
@@ -464,7 +464,7 @@ async def startup_event():
     startup_time = time.time() - startup_start_time
     logger.info("🚀 FastAPI STARTUP EVENT TRIGGERED")
     logger.info(f"Time since import: {startup_time:.2f} seconds")
-
+    
     logger.info("📊 System information:")
     import psutil
 
@@ -473,7 +473,7 @@ async def startup_event():
         logger.info(f"  Available memory: {memory_info.available / (1024**3):.2f} GB")
         logger.info(f"  Total memory: {memory_info.total / (1024**3):.2f} GB")
         logger.info(f"  Memory usage: {memory_info.percent}%")
-
+        
         cpu_count = psutil.cpu_count()
         cpu_percent = psutil.cpu_percent(interval=1)
         logger.info(f"  CPU cores: {cpu_count}")
@@ -482,10 +482,10 @@ async def startup_event():
         logger.warning("psutil not available - cannot show system info")
     except Exception as e:
         logger.warning(f"Error getting system info: {e}")
-
+    
     logger.info("🔄 Starting model loading from startup event...")
     success = load_model()
-
+    
     if success:
         logger.info("✅ STARTUP COMPLETED SUCCESSFULLY!")
     else:
@@ -498,10 +498,10 @@ async def health_check():
     """Enhanced health check endpoint with detailed status information and monitoring metrics"""
     check_start_time = time.time()
     logger.info("🏥 Health check requested")
-
+    
     model_loaded = model is not None
     feature_engine_loaded = feature_engine is not None
-
+    
     # Get performance summary from prediction logger
     performance_summary = prediction_logger.get_performance_summary()
 
@@ -519,7 +519,7 @@ async def health_check():
         "performance_summary": performance_summary,
         "system_info": {},
     }
-
+    
     # Add system info if available
     try:
         import psutil
@@ -532,11 +532,11 @@ async def health_check():
         }
     except:
         pass
-
+    
     logger.info(
         f"Health status: {json.dumps({k: v for k, v in health_status.items() if k != 'performance_summary'}, indent=2)}"
     )
-
+    
     # If models aren't loaded yet, try to load them
     if not model_loaded or not feature_engine_loaded:
         logger.info("🔄 Models not loaded, attempting to load from health check...")
@@ -547,10 +547,10 @@ async def health_check():
             health_status["model_loaded"] = model_loaded
             health_status["feature_engine_loaded"] = feature_engine_loaded
             health_status["load_status"] = dict(model_load_status)
-
+    
     check_time = time.time() - check_start_time
     health_status["health_check_duration"] = round(check_time, 3)
-
+    
     # Return appropriate status
     if model_loaded and feature_engine_loaded:
         logger.info(f"✅ Health check PASSED in {check_time:.3f}s")
@@ -580,7 +580,7 @@ async def health_check():
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
     """Make a prediction on the input text with comprehensive monitoring and logging"""
-
+    
     # Check if model is loaded
     if model is None or feature_engine is None:
         prediction_logger.log_error(
@@ -591,7 +591,7 @@ async def predict(request: PredictionRequest):
         raise HTTPException(
             status_code=503, detail="Model not loaded. Please check server logs."
         )
-
+    
     # Start timing
     total_start_time = time.time()
 
@@ -600,30 +600,30 @@ async def predict(request: PredictionRequest):
         preprocessing_start = time.time()
         text_features = feature_engine.transform([request.text])
         preprocessing_time_ms = (time.time() - preprocessing_start) * 1000
-
+        
         # Prediction phase
         prediction_start = time.time()
         prediction_encoded = model.predict(text_features)[0]
-
+        
         # Decode the prediction back to class name
         prediction = feature_engine.label_encoder.inverse_transform(
             [prediction_encoded]
         )[0]
-
+        
         # Get prediction probabilities for confidence and top predictions
         probabilities = model.predict_proba(text_features)[0]
         prediction_time_ms = (time.time() - prediction_start) * 1000
-
+        
         # Get class names from label encoder
         class_names = feature_engine.label_encoder.classes_
-
+        
         # Create top predictions
         top_indices = np.argsort(probabilities)[-5:][::-1]  # Top 5 predictions
         top_predictions = [
             {"class": class_names[idx], "confidence": float(probabilities[idx])}
             for idx in top_indices
         ]
-
+        
         # Get confidence for the predicted class
         confidence = float(probabilities[prediction_encoded])
 
@@ -648,14 +648,14 @@ async def predict(request: PredictionRequest):
         logger.info(
             f"✅ Prediction completed - ID: {request_id}, Time: {total_time_ms:.1f}ms, Confidence: {confidence:.3f}"
         )
-
+        
         return PredictionResponse(
             prediction=prediction,
             confidence=confidence,
             top_predictions=top_predictions,
             request_id=request_id,
         )
-
+        
     except Exception as e:
         total_time_ms = (time.time() - total_start_time) * 1000
         error_msg = str(e)
@@ -946,4 +946,4 @@ async def get_model_staleness():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000) 

@@ -133,6 +133,7 @@ jobs:
         file: infrastructure/docker/Dockerfile.api
         platforms: linux/amd64
         push: false
+        load: true
         tags: ${{ env.IMAGE_NAME }}:test
         cache-from: type=gha
         cache-to: type=gha,mode=max
