@@ -141,28 +141,55 @@ jobs:
     - name: Test Docker image
       run: |
         # Start container in background
-        docker run -d --name test-container -p 8000:8000 ${{ env.IMAGE_NAME }}:test
+        docker run -d --name test-container -p 8000:8000 -e CI=true -e GITHUB_ACTIONS=true ${{ env.IMAGE_NAME }}:test
         
-        # Wait for startup
-        sleep 30
+        # Wait for startup and check logs
+        echo "Waiting for startup..."
+        sleep 60
         
-        # Test health endpoint
+        # Check container logs for debugging
+        echo "=== CONTAINER LOGS ==="
+        docker logs test-container
+        echo "======================="
+        
+        # Check if container is still running
+        if ! docker ps | grep test-container; then
+          echo "❌ Container stopped running!"
+          docker logs test-container
+          exit 1
+        fi
+        
+        # Test health endpoint with more patience
+        echo "Testing health endpoint..."
         for i in {1..10}; do
-          if curl -f http://localhost:8000/health; then
-            echo "Health check passed"
+          echo "Attempt $i:"
+          RESPONSE=$(curl -s -w "HTTP_CODE:%{http_code}\n" http://localhost:8000/health || echo "CURL_FAILED")
+          echo "Response: $RESPONSE"
+          
+          if echo "$RESPONSE" | grep -q "HTTP_CODE:200"; then
+            echo "✅ Health check passed"
             break
           fi
-          echo "Attempt $i failed, retrying..."
-          sleep 10
+          
+          if [ $i -eq 10 ]; then
+            echo "❌ Health check failed after 10 attempts"
+            echo "Getting more detailed logs..."
+            docker logs test-container --tail 100
+            exit 1
+          fi
+          
+          echo "Retrying in 30 seconds..."
+          sleep 30
         done
         
         # Test prediction endpoint
+        echo "Testing prediction endpoint..."
         curl -X POST http://localhost:8000/predict \
           -H "Content-Type: application/json" \
           -d '{"text": "Patient presents with chest pain and shortness of breath."}' \
           | grep -q "prediction"
         
-        echo "Docker image tests passed!"
+        echo "✅ Docker image tests passed!"
         
     - name: Clean up test container
       if: always()
