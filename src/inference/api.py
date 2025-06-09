@@ -6,6 +6,14 @@ from typing import List, Optional
 import logging
 from pathlib import Path
 import os
+import sys
+
+# Import the feature engine class and make it available for pickle
+from src.inference.feature_engine import MedicalTextFeatureEngine
+
+# Monkey patch for pickle deserialization - make the class available 
+# in the module namespace that pickle expects
+sys.modules['__main__'].MedicalTextFeatureEngine = MedicalTextFeatureEngine
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -103,13 +111,16 @@ async def predict(request: PredictionRequest):
         text_features = feature_engine.transform([request.text])
         
         # Make prediction
-        prediction = model.predict(text_features)[0]
+        prediction_encoded = model.predict(text_features)[0]
+        
+        # Decode the prediction back to class name
+        prediction = feature_engine.label_encoder.inverse_transform([prediction_encoded])[0]
         
         # Get prediction probabilities for confidence and top predictions
         probabilities = model.predict_proba(text_features)[0]
         
-        # Get class names (assuming they're available in the model)
-        class_names = model.classes_
+        # Get class names from label encoder
+        class_names = feature_engine.label_encoder.classes_
         
         # Create top predictions
         top_indices = np.argsort(probabilities)[-5:][::-1]  # Top 5 predictions
@@ -122,8 +133,7 @@ async def predict(request: PredictionRequest):
         ]
         
         # Get confidence for the predicted class
-        predicted_class_idx = np.where(class_names == prediction)[0][0]
-        confidence = float(probabilities[predicted_class_idx])
+        confidence = float(probabilities[prediction_encoded])
         
         return PredictionResponse(
             prediction=prediction,
