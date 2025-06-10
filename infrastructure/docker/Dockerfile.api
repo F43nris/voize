@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY src/ ./src/
+COPY data-pipeline/ ./data-pipeline/
 COPY data/optimized_multinomial_nb.pkl ./data/
 COPY data/feature_engine.pkl ./data/
 
