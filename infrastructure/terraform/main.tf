@@ -31,7 +31,8 @@ resource "google_project_service" "required_apis" {
     "artifactregistry.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
-    "cloudresourcemanager.googleapis.com"
+    "cloudresourcemanager.googleapis.com",
+    "storage.googleapis.com"
   ])
   
   service = each.key
@@ -46,6 +47,27 @@ resource "google_artifact_registry_repository" "ml_models" {
   repository_id = "ml-models"
   description   = "Repository for ML model containers"
   format        = "DOCKER"
+  
+  depends_on = [google_project_service.required_apis]
+}
+
+# GCS bucket for ML models
+resource "google_storage_bucket" "ml_models" {
+  name          = "voize-ml-models"
+  location      = var.region
+  force_destroy = false
+  
+  uniform_bucket_level_access = true
+  
+  versioning {
+    enabled = true
+  }
+  
+  labels = {
+    environment = var.environment
+    purpose     = "ml-models"
+    managed-by  = "terraform"
+  }
   
   depends_on = [google_project_service.required_apis]
 }
@@ -69,7 +91,9 @@ module "cloud_run" {
   
   # Environment variables
   env_vars = {
-    ENV = "production"
+    ENV                = "production"
+    GCP_PROJECT_ID     = var.project_id
+    GCS_MODEL_BUCKET   = "voize-ml-models"
   }
   
   depends_on = [
