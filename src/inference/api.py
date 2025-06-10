@@ -691,104 +691,100 @@ async def predict(request: PredictionRequest):
         raise HTTPException(status_code=500, detail=f"Prediction failed: {error_msg}")
 
 
-# New monitoring endpoints - wrapped in try-except to ensure they register
-try:
-    @app.get("/monitoring/metrics", response_model=MonitoringResponse)
-    async def get_business_metrics():
-        """Get current business metrics and performance data"""
-        try:
-            metrics = business_metrics.get_current_metrics()
-            return MonitoringResponse(timestamp=metrics["timestamp"], data=metrics)
-        except Exception as e:
-            logger.error(f"Error getting business metrics: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve metrics")
+# New monitoring endpoints - removed try-except to see actual errors
+@app.get("/monitoring/metrics", response_model=MonitoringResponse)
+async def get_business_metrics():
+    """Get current business metrics and performance data"""
+    try:
+        metrics = business_metrics.get_current_metrics()
+        return MonitoringResponse(timestamp=metrics["timestamp"], data=metrics)
+    except Exception as e:
+        logger.error(f"Error getting business metrics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve metrics")
 
 
-    @app.get("/monitoring/performance", response_model=MonitoringResponse)
-    async def get_performance_summary():
-        """Get detailed performance summary from prediction logger"""
-        try:
-            performance = prediction_logger.get_performance_summary()
-            return MonitoringResponse(timestamp=performance["timestamp"], data=performance)
-        except Exception as e:
-            logger.error(f"Error getting performance summary: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve performance data"
-            )
+@app.get("/monitoring/performance", response_model=MonitoringResponse)
+async def get_performance_summary():
+    """Get detailed performance summary from prediction logger"""
+    try:
+        performance = prediction_logger.get_performance_summary()
+        return MonitoringResponse(timestamp=performance["timestamp"], data=performance)
+    except Exception as e:
+        logger.error(f"Error getting performance summary: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve performance data"
+        )
 
 
-    @app.get("/monitoring/drift", response_model=MonitoringResponse)
-    async def get_drift_analysis(window_size: int = 100):
-        """Get model drift detection analysis"""
-        try:
-            drift_analysis = prediction_logger.detect_drift(window_size=window_size)
-            return MonitoringResponse(
-                timestamp=drift_analysis.get("timestamp", datetime.now().isoformat()),
-                data=drift_analysis,
-            )
-        except Exception as e:
-            logger.error(f"Error getting drift analysis: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve drift analysis")
+@app.get("/monitoring/drift", response_model=MonitoringResponse)
+async def get_drift_analysis(window_size: int = 100):
+    """Get model drift detection analysis"""
+    try:
+        drift_analysis = prediction_logger.detect_drift(window_size=window_size)
+        return MonitoringResponse(
+            timestamp=drift_analysis.get("timestamp", datetime.now().isoformat()),
+            data=drift_analysis,
+        )
+    except Exception as e:
+        logger.error(f"Error getting drift analysis: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve drift analysis")
 
 
-    @app.get("/monitoring/errors", response_model=MonitoringResponse)
-    async def get_error_summary(hours: int = 24):
-        """Get error summary for the specified time period"""
-        try:
-            error_summary = business_metrics.get_error_summary(hours=hours)
-            return MonitoringResponse(
-                timestamp=error_summary["timestamp"], data=error_summary
-            )
-        except Exception as e:
-            logger.error(f"Error getting error summary: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve error summary")
+@app.get("/monitoring/errors", response_model=MonitoringResponse)
+async def get_error_summary(hours: int = 24):
+    """Get error summary for the specified time period"""
+    try:
+        error_summary = business_metrics.get_error_summary(hours=hours)
+        return MonitoringResponse(
+            timestamp=error_summary["timestamp"], data=error_summary
+        )
+    except Exception as e:
+        logger.error(f"Error getting error summary: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve error summary")
 
 
-    @app.get("/monitoring/anomalies", response_model=MonitoringResponse)
-    async def get_anomaly_detection():
-        """Get current anomaly detection results"""
-        try:
-            anomalies = business_metrics.detect_anomalies()
-            return MonitoringResponse(timestamp=anomalies["timestamp"], data=anomalies)
-        except Exception as e:
-            logger.error(f"Error getting anomaly detection: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve anomaly detection"
-            )
+@app.get("/monitoring/anomalies", response_model=MonitoringResponse)
+async def get_anomaly_detection():
+    """Get current anomaly detection results"""
+    try:
+        anomalies = business_metrics.detect_anomalies()
+        return MonitoringResponse(timestamp=anomalies["timestamp"], data=anomalies)
+    except Exception as e:
+        logger.error(f"Error getting anomaly detection: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve anomaly detection"
+        )
 
 
-    @app.get("/monitoring/trends", response_model=MonitoringResponse)
-    async def get_hourly_trends(hours: int = 24):
-        """Get hourly trends for requests, errors, and performance"""
-        try:
-            trends = business_metrics.get_hourly_trends(hours=hours)
-            return MonitoringResponse(timestamp=trends["timestamp"], data=trends)
-        except Exception as e:
-            logger.error(f"Error getting trends: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve trends")
+@app.get("/monitoring/trends", response_model=MonitoringResponse)
+async def get_hourly_trends(hours: int = 24):
+    """Get hourly trends for requests, errors, and performance"""
+    try:
+        trends = business_metrics.get_hourly_trends(hours=hours)
+        return MonitoringResponse(timestamp=trends["timestamp"], data=trends)
+    except Exception as e:
+        logger.error(f"Error getting trends: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve trends")
 
 
-    @app.get("/monitoring/endpoint/{endpoint_name}", response_model=MonitoringResponse)
-    async def get_endpoint_metrics(endpoint_name: str):
-        """Get metrics for a specific endpoint"""
-        try:
-            # URL decode the endpoint name
-            import urllib.parse
+@app.get("/monitoring/endpoint/{endpoint_name}", response_model=MonitoringResponse)
+async def get_endpoint_metrics(endpoint_name: str):
+    """Get metrics for a specific endpoint"""
+    try:
+        # URL decode the endpoint name
+        import urllib.parse
 
-            decoded_endpoint = urllib.parse.unquote(endpoint_name)
-            if not decoded_endpoint.startswith("/"):
-                decoded_endpoint = "/" + decoded_endpoint
+        decoded_endpoint = urllib.parse.unquote(endpoint_name)
+        if not decoded_endpoint.startswith("/"):
+            decoded_endpoint = "/" + decoded_endpoint
 
-            metrics = business_metrics.get_endpoint_metrics(decoded_endpoint)
-            return MonitoringResponse(timestamp=metrics["timestamp"], data=metrics)
-        except Exception as e:
-            logger.error(f"Error getting endpoint metrics: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve endpoint metrics"
-            )
-
-except Exception as e:
-    logger.error(f"Failed to register monitoring endpoints: {e}")
+        metrics = business_metrics.get_endpoint_metrics(decoded_endpoint)
+        return MonitoringResponse(timestamp=metrics["timestamp"], data=metrics)
+    except Exception as e:
+        logger.error(f"Error getting endpoint metrics: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve endpoint metrics"
+        )
 
 
 @app.get("/")
@@ -958,115 +954,108 @@ def _get_staleness_recommendation(alerts: List[Dict]) -> str:
         return "Monitor model performance and consider retraining schedule"
 
 
-# Monitoring endpoints wrapped in try-except to ensure they register
-try:
-    @app.get("/monitoring/staleness", response_model=MonitoringResponse)
-    async def get_model_staleness():
-        """Get model staleness analysis and recommendations"""
-        try:
-            staleness_data = check_model_staleness()
-            return MonitoringResponse(
-                timestamp=staleness_data["timestamp"], data=staleness_data
-            )
-        except Exception as e:
-            logger.error(f"Error getting model staleness: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve staleness analysis"
-            )
+# Monitoring staleness endpoint - removed try-except to see actual errors
+@app.get("/monitoring/staleness", response_model=MonitoringResponse)
+async def get_model_staleness():
+    """Get model staleness analysis and recommendations"""
+    try:
+        staleness_data = check_model_staleness()
+        return MonitoringResponse(
+            timestamp=staleness_data["timestamp"], data=staleness_data
+        )
+    except Exception as e:
+        logger.error(f"Error getting model staleness: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve staleness analysis"
+        )
 
-except Exception as e:
-    logger.error(f"Failed to register monitoring/staleness endpoint: {e}")
 
-# DAG Management Endpoints wrapped in try-except
-try:
-    @app.get("/dags")
-    async def list_dags():
-        """List all available DAGs and their status"""
-        if not dag_scheduler:
-            raise HTTPException(status_code=503, detail="DAG scheduler not available")
+# DAG Management Endpoints - removed try-except to see actual errors
+@app.get("/dags")
+async def list_dags():
+    """List all available DAGs and their status"""
+    if not dag_scheduler:
+        raise HTTPException(status_code=503, detail="DAG scheduler not available")
+    
+    try:
+        dags_info = []
+        for dag_id in dag_scheduler.dags:
+            dag_status = dag_scheduler.get_dag_status(dag_id)
+            dags_info.append(dag_status)
         
-        try:
-            dags_info = []
-            for dag_id in dag_scheduler.dags:
-                dag_status = dag_scheduler.get_dag_status(dag_id)
-                dags_info.append(dag_status)
-            
-            return {
-                "dags": dags_info,
-                "scheduler_running": dag_scheduler.running,
-                "total_dags": len(dag_scheduler.dags)
+        return {
+            "dags": dags_info,
+            "scheduler_running": dag_scheduler.running,
+            "total_dags": len(dag_scheduler.dags)
+        }
+    except Exception as e:
+        logger.error(f"Error listing DAGs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/dags/{dag_id}/status")
+async def get_dag_status(dag_id: str):
+    """Get detailed status of a specific DAG"""
+    if not dag_scheduler:
+        raise HTTPException(status_code=503, detail="DAG scheduler not available")
+    
+    try:
+        return dag_scheduler.get_dag_status(dag_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error getting DAG status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/dags/{dag_id}/run")
+async def trigger_dag(dag_id: str):
+    """Manually trigger a DAG execution"""
+    if not dag_scheduler:
+        raise HTTPException(status_code=503, detail="DAG scheduler not available")
+    
+    try:
+        result = dag_scheduler.run_dag_now(dag_id)
+        return {
+            "message": f"DAG {dag_id} triggered successfully",
+            "run_result": {
+                "status": result["status"],
+                "duration_seconds": result["duration_seconds"],
+                "success_count": result["success_count"],
+                "failed_count": result["failed_count"],
+                "start_time": result["start_time"].isoformat(),
+                "end_time": result["end_time"].isoformat()
             }
-        except Exception as e:
-            logger.error(f"Error listing DAGs: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error running DAG: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    @app.get("/dags/{dag_id}/status")
-    async def get_dag_status(dag_id: str):
-        """Get detailed status of a specific DAG"""
-        if not dag_scheduler:
-            raise HTTPException(status_code=503, detail="DAG scheduler not available")
-        
-        try:
-            return dag_scheduler.get_dag_status(dag_id)
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except Exception as e:
-            logger.error(f"Error getting DAG status: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+@app.post("/scheduler/start")
+async def start_scheduler():
+    """Start the DAG scheduler"""
+    if not dag_scheduler:
+        raise HTTPException(status_code=503, detail="DAG scheduler not available")
+    
+    try:
+        dag_scheduler.start()
+        return {"message": "DAG scheduler started", "running": dag_scheduler.running}
+    except Exception as e:
+        logger.error(f"Error starting scheduler: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    @app.post("/dags/{dag_id}/run")
-    async def trigger_dag(dag_id: str):
-        """Manually trigger a DAG execution"""
-        if not dag_scheduler:
-            raise HTTPException(status_code=503, detail="DAG scheduler not available")
-        
-        try:
-            result = dag_scheduler.run_dag_now(dag_id)
-            return {
-                "message": f"DAG {dag_id} triggered successfully",
-                "run_result": {
-                    "status": result["status"],
-                    "duration_seconds": result["duration_seconds"],
-                    "success_count": result["success_count"],
-                    "failed_count": result["failed_count"],
-                    "start_time": result["start_time"].isoformat(),
-                    "end_time": result["end_time"].isoformat()
-                }
-            }
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except Exception as e:
-            logger.error(f"Error running DAG: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @app.post("/scheduler/start")
-    async def start_scheduler():
-        """Start the DAG scheduler"""
-        if not dag_scheduler:
-            raise HTTPException(status_code=503, detail="DAG scheduler not available")
-        
-        try:
-            dag_scheduler.start()
-            return {"message": "DAG scheduler started", "running": dag_scheduler.running}
-        except Exception as e:
-            logger.error(f"Error starting scheduler: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @app.post("/scheduler/stop")
-    async def stop_scheduler():
-        """Stop the DAG scheduler"""
-        if not dag_scheduler:
-            raise HTTPException(status_code=503, detail="DAG scheduler not available")
-        
-        try:
-            dag_scheduler.stop()
-            return {"message": "DAG scheduler stopped", "running": dag_scheduler.running}
-        except Exception as e:
-            logger.error(f"Error stopping scheduler: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-except Exception as e:
-    logger.error(f"Failed to register DAG management endpoints: {e}")
+@app.post("/scheduler/stop")
+async def stop_scheduler():
+    """Stop the DAG scheduler"""
+    if not dag_scheduler:
+        raise HTTPException(status_code=503, detail="DAG scheduler not available")
+    
+    try:
+        dag_scheduler.stop()
+        return {"message": "DAG scheduler stopped", "running": dag_scheduler.running}
+    except Exception as e:
+        logger.error(f"Error stopping scheduler: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
