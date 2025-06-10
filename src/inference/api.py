@@ -222,8 +222,19 @@ def download_models_from_cloud():
     
     # Check if models already exist locally
     if model_path.exists() and feature_engine_path.exists():
-        logger.info("✅ Model files found locally, skipping cloud download")
-        return True
+        # Check if these are real model files (not dummy CI/CD files)
+        model_size = model_path.stat().st_size
+        feature_engine_size = feature_engine_path.stat().st_size
+        
+        # Real model files should be much larger than dummy files
+        min_model_size = 1024 * 10  # 10KB minimum
+        
+        if model_size >= min_model_size and feature_engine_size >= min_model_size:
+            logger.info("✅ Model files found locally, skipping cloud download")
+            return True
+        else:
+            logger.warning(f"⚠️  Found dummy/corrupted model files (model: {model_size}B, feature_engine: {feature_engine_size}B)")
+            logger.info("🔄 Proceeding with cloud download to get real models")
     
     # Try to download from cloud storage
     if not GCS_AVAILABLE:
