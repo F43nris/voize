@@ -691,100 +691,104 @@ async def predict(request: PredictionRequest):
         raise HTTPException(status_code=500, detail=f"Prediction failed: {error_msg}")
 
 
-# New monitoring endpoints
-@app.get("/monitoring/metrics", response_model=MonitoringResponse)
-async def get_business_metrics():
-    """Get current business metrics and performance data"""
-    try:
-        metrics = business_metrics.get_current_metrics()
-        return MonitoringResponse(timestamp=metrics["timestamp"], data=metrics)
-    except Exception as e:
-        logger.error(f"Error getting business metrics: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve metrics")
+# New monitoring endpoints - wrapped in try-except to ensure they register
+try:
+    @app.get("/monitoring/metrics", response_model=MonitoringResponse)
+    async def get_business_metrics():
+        """Get current business metrics and performance data"""
+        try:
+            metrics = business_metrics.get_current_metrics()
+            return MonitoringResponse(timestamp=metrics["timestamp"], data=metrics)
+        except Exception as e:
+            logger.error(f"Error getting business metrics: {e}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve metrics")
 
 
-@app.get("/monitoring/performance", response_model=MonitoringResponse)
-async def get_performance_summary():
-    """Get detailed performance summary from prediction logger"""
-    try:
-        performance = prediction_logger.get_performance_summary()
-        return MonitoringResponse(timestamp=performance["timestamp"], data=performance)
-    except Exception as e:
-        logger.error(f"Error getting performance summary: {e}")
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve performance data"
-        )
+    @app.get("/monitoring/performance", response_model=MonitoringResponse)
+    async def get_performance_summary():
+        """Get detailed performance summary from prediction logger"""
+        try:
+            performance = prediction_logger.get_performance_summary()
+            return MonitoringResponse(timestamp=performance["timestamp"], data=performance)
+        except Exception as e:
+            logger.error(f"Error getting performance summary: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to retrieve performance data"
+            )
 
 
-@app.get("/monitoring/drift", response_model=MonitoringResponse)
-async def get_drift_analysis(window_size: int = 100):
-    """Get model drift detection analysis"""
-    try:
-        drift_analysis = prediction_logger.detect_drift(window_size=window_size)
-        return MonitoringResponse(
-            timestamp=drift_analysis.get("timestamp", datetime.now().isoformat()),
-            data=drift_analysis,
-        )
-    except Exception as e:
-        logger.error(f"Error getting drift analysis: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve drift analysis")
+    @app.get("/monitoring/drift", response_model=MonitoringResponse)
+    async def get_drift_analysis(window_size: int = 100):
+        """Get model drift detection analysis"""
+        try:
+            drift_analysis = prediction_logger.detect_drift(window_size=window_size)
+            return MonitoringResponse(
+                timestamp=drift_analysis.get("timestamp", datetime.now().isoformat()),
+                data=drift_analysis,
+            )
+        except Exception as e:
+            logger.error(f"Error getting drift analysis: {e}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve drift analysis")
 
 
-@app.get("/monitoring/errors", response_model=MonitoringResponse)
-async def get_error_summary(hours: int = 24):
-    """Get error summary for the specified time period"""
-    try:
-        error_summary = business_metrics.get_error_summary(hours=hours)
-        return MonitoringResponse(
-            timestamp=error_summary["timestamp"], data=error_summary
-        )
-    except Exception as e:
-        logger.error(f"Error getting error summary: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve error summary")
+    @app.get("/monitoring/errors", response_model=MonitoringResponse)
+    async def get_error_summary(hours: int = 24):
+        """Get error summary for the specified time period"""
+        try:
+            error_summary = business_metrics.get_error_summary(hours=hours)
+            return MonitoringResponse(
+                timestamp=error_summary["timestamp"], data=error_summary
+            )
+        except Exception as e:
+            logger.error(f"Error getting error summary: {e}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve error summary")
 
 
-@app.get("/monitoring/anomalies", response_model=MonitoringResponse)
-async def get_anomaly_detection():
-    """Get current anomaly detection results"""
-    try:
-        anomalies = business_metrics.detect_anomalies()
-        return MonitoringResponse(timestamp=anomalies["timestamp"], data=anomalies)
-    except Exception as e:
-        logger.error(f"Error getting anomaly detection: {e}")
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve anomaly detection"
-        )
+    @app.get("/monitoring/anomalies", response_model=MonitoringResponse)
+    async def get_anomaly_detection():
+        """Get current anomaly detection results"""
+        try:
+            anomalies = business_metrics.detect_anomalies()
+            return MonitoringResponse(timestamp=anomalies["timestamp"], data=anomalies)
+        except Exception as e:
+            logger.error(f"Error getting anomaly detection: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to retrieve anomaly detection"
+            )
 
 
-@app.get("/monitoring/trends", response_model=MonitoringResponse)
-async def get_hourly_trends(hours: int = 24):
-    """Get hourly trends for requests, errors, and performance"""
-    try:
-        trends = business_metrics.get_hourly_trends(hours=hours)
-        return MonitoringResponse(timestamp=trends["timestamp"], data=trends)
-    except Exception as e:
-        logger.error(f"Error getting trends: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve trends")
+    @app.get("/monitoring/trends", response_model=MonitoringResponse)
+    async def get_hourly_trends(hours: int = 24):
+        """Get hourly trends for requests, errors, and performance"""
+        try:
+            trends = business_metrics.get_hourly_trends(hours=hours)
+            return MonitoringResponse(timestamp=trends["timestamp"], data=trends)
+        except Exception as e:
+            logger.error(f"Error getting trends: {e}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve trends")
 
 
-@app.get("/monitoring/endpoint/{endpoint_name}", response_model=MonitoringResponse)
-async def get_endpoint_metrics(endpoint_name: str):
-    """Get metrics for a specific endpoint"""
-    try:
-        # URL decode the endpoint name
-        import urllib.parse
+    @app.get("/monitoring/endpoint/{endpoint_name}", response_model=MonitoringResponse)
+    async def get_endpoint_metrics(endpoint_name: str):
+        """Get metrics for a specific endpoint"""
+        try:
+            # URL decode the endpoint name
+            import urllib.parse
 
-        decoded_endpoint = urllib.parse.unquote(endpoint_name)
-        if not decoded_endpoint.startswith("/"):
-            decoded_endpoint = "/" + decoded_endpoint
+            decoded_endpoint = urllib.parse.unquote(endpoint_name)
+            if not decoded_endpoint.startswith("/"):
+                decoded_endpoint = "/" + decoded_endpoint
 
-        metrics = business_metrics.get_endpoint_metrics(decoded_endpoint)
-        return MonitoringResponse(timestamp=metrics["timestamp"], data=metrics)
-    except Exception as e:
-        logger.error(f"Error getting endpoint metrics: {e}")
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve endpoint metrics"
-        )
+            metrics = business_metrics.get_endpoint_metrics(decoded_endpoint)
+            return MonitoringResponse(timestamp=metrics["timestamp"], data=metrics)
+        except Exception as e:
+            logger.error(f"Error getting endpoint metrics: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to retrieve endpoint metrics"
+            )
+
+except Exception as e:
+    logger.error(f"Failed to register monitoring endpoints: {e}")
 
 
 @app.get("/")
@@ -857,76 +861,83 @@ async def root():
 # Model staleness monitoring utility
 def check_model_staleness() -> Dict[str, Any]:
     """Check if the model is getting stale based on usage patterns and age"""
-    current_time = datetime.now(timezone.utc)
+    try:
+        current_time = datetime.now(timezone.utc)
 
-    # Model age since loading
-    model_loaded_time = datetime.fromisoformat(
-        prediction_logger.model_loaded_at.replace("Z", "+00:00")
-    )
-    model_age_hours = (current_time - model_loaded_time).total_seconds() / 3600
-
-    # Get recent prediction activity
-    performance_stats = prediction_logger.get_performance_summary()
-    total_predictions = performance_stats["performance_stats"]["total_predictions"]
-
-    # Check for staleness indicators
-    staleness_alerts = []
-
-    # Model is very old (> 7 days)
-    if model_age_hours > 168:  # 7 days
-        staleness_alerts.append(
-            {
-                "type": "MODEL_AGE_HIGH",
-                "severity": (
-                    "HIGH" if model_age_hours > 720 else "MEDIUM"
-                ),  # 30 days = HIGH
-                "message": f"Model is {model_age_hours:.1f} hours old (threshold: 168 hours)",
-                "value": model_age_hours,
-            }
+        # Model age since loading
+        model_loaded_time = datetime.fromisoformat(
+            prediction_logger.model_loaded_at.replace("Z", "+00:00")
         )
+        model_age_hours = (current_time - model_loaded_time).total_seconds() / 3600
 
-    # Very low prediction volume (potential data drift or service not being used)
-    recent_metrics = business_metrics.get_current_metrics()["metrics"]
-    requests_per_minute = recent_metrics.get("requests_per_minute", 0)
+        # Get recent prediction activity
+        performance_stats = prediction_logger.get_performance_summary()
+        total_predictions = performance_stats["performance_stats"]["total_predictions"]
 
-    if (
-        requests_per_minute < 0.1 and model_age_hours > 1
-    ):  # Less than 6 requests per hour after 1 hour
-        staleness_alerts.append(
-            {
-                "type": "LOW_USAGE_VOLUME",
-                "severity": "MEDIUM",
-                "message": f"Very low prediction volume: {requests_per_minute:.2f} req/min",
-                "value": requests_per_minute,
-            }
-        )
+        # Check for staleness indicators
+        staleness_alerts = []
 
-    # Check for confidence degradation over time
-    if len(prediction_logger.recent_predictions) >= 50:
-        recent_confidences = [
-            p["confidence"] for p in prediction_logger.recent_predictions[-50:]
-        ]
-        avg_recent_confidence = sum(recent_confidences) / len(recent_confidences)
-
-        if avg_recent_confidence < 0.6:
+        # Model is very old (> 7 days)
+        if model_age_hours > 168:  # 7 days
             staleness_alerts.append(
                 {
-                    "type": "CONFIDENCE_DEGRADATION",
-                    "severity": "HIGH" if avg_recent_confidence < 0.5 else "MEDIUM",
-                    "message": f"Average confidence dropping: {avg_recent_confidence:.3f} (threshold: 0.6)",
-                    "value": avg_recent_confidence,
+                    "type": "MODEL_AGE_HIGH",
+                    "severity": (
+                        "HIGH" if model_age_hours > 720 else "MEDIUM"
+                    ),  # 30 days = HIGH
+                    "message": f"Model is {model_age_hours:.1f} hours old (threshold: 168 hours)",
+                    "value": model_age_hours,
                 }
             )
 
-    return {
-        "model_age_hours": model_age_hours,
-        "model_loaded_at": prediction_logger.model_loaded_at,
-        "total_predictions": total_predictions,
-        "staleness_alerts": staleness_alerts,
-        "staleness_score": len(staleness_alerts),
-        "recommendation": _get_staleness_recommendation(staleness_alerts),
-        "timestamp": current_time.isoformat(),
-    }
+        # Very low prediction volume (potential data drift or service not being used)
+        recent_metrics = business_metrics.get_current_metrics()["metrics"]
+        requests_per_minute = recent_metrics.get("requests_per_minute", 0)
+
+        if (
+            requests_per_minute < 0.1 and model_age_hours > 1
+        ):  # Less than 6 requests per hour after 1 hour
+            staleness_alerts.append(
+                {
+                    "type": "LOW_USAGE_VOLUME",
+                    "severity": "MEDIUM",
+                    "message": f"Very low prediction volume: {requests_per_minute:.2f} req/min",
+                    "value": requests_per_minute,
+                }
+            )
+
+        # Check for confidence degradation over time
+        if len(prediction_logger.recent_predictions) >= 50:
+            recent_confidences = [
+                p["confidence"] for p in prediction_logger.recent_predictions[-50:]
+            ]
+            avg_recent_confidence = sum(recent_confidences) / len(recent_confidences)
+
+            if avg_recent_confidence < 0.6:
+                staleness_alerts.append(
+                    {
+                        "type": "CONFIDENCE_DEGRADATION",
+                        "severity": "HIGH" if avg_recent_confidence < 0.5 else "MEDIUM",
+                        "message": f"Average confidence dropping: {avg_recent_confidence:.3f} (threshold: 0.6)",
+                        "value": avg_recent_confidence,
+                    }
+                )
+
+        return {
+            "model_age_hours": model_age_hours,
+            "model_loaded_at": prediction_logger.model_loaded_at,
+            "total_predictions": total_predictions,
+            "staleness_alerts": staleness_alerts,
+            "staleness_score": len(staleness_alerts),
+            "recommendation": _get_staleness_recommendation(staleness_alerts),
+            "timestamp": current_time.isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Error checking model staleness: {e}")
+        return {
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
 
 def _get_staleness_recommendation(alerts: List[Dict]) -> str:
@@ -947,107 +958,115 @@ def _get_staleness_recommendation(alerts: List[Dict]) -> str:
         return "Monitor model performance and consider retraining schedule"
 
 
-@app.get("/monitoring/staleness", response_model=MonitoringResponse)
-async def get_model_staleness():
-    """Get model staleness analysis and recommendations"""
-    try:
-        staleness_data = check_model_staleness()
-        return MonitoringResponse(
-            timestamp=staleness_data["timestamp"], data=staleness_data
-        )
-    except Exception as e:
-        logger.error(f"Error getting model staleness: {e}")
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve staleness analysis"
-        )
+# Monitoring endpoints wrapped in try-except to ensure they register
+try:
+    @app.get("/monitoring/staleness", response_model=MonitoringResponse)
+    async def get_model_staleness():
+        """Get model staleness analysis and recommendations"""
+        try:
+            staleness_data = check_model_staleness()
+            return MonitoringResponse(
+                timestamp=staleness_data["timestamp"], data=staleness_data
+            )
+        except Exception as e:
+            logger.error(f"Error getting model staleness: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to retrieve staleness analysis"
+            )
 
+except Exception as e:
+    logger.error(f"Failed to register monitoring/staleness endpoint: {e}")
 
-# DAG Management Endpoints
-@app.get("/dags")
-async def list_dags():
-    """List all available DAGs and their status"""
-    if not dag_scheduler:
-        raise HTTPException(status_code=503, detail="DAG scheduler not available")
-    
-    try:
-        dags_info = []
-        for dag_id in dag_scheduler.dags:
-            dag_status = dag_scheduler.get_dag_status(dag_id)
-            dags_info.append(dag_status)
+# DAG Management Endpoints wrapped in try-except
+try:
+    @app.get("/dags")
+    async def list_dags():
+        """List all available DAGs and their status"""
+        if not dag_scheduler:
+            raise HTTPException(status_code=503, detail="DAG scheduler not available")
         
-        return {
-            "dags": dags_info,
-            "scheduler_running": dag_scheduler.running,
-            "total_dags": len(dag_scheduler.dags)
-        }
-    except Exception as e:
-        logger.error(f"Error listing DAGs: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/dags/{dag_id}/status")
-async def get_dag_status(dag_id: str):
-    """Get detailed status of a specific DAG"""
-    if not dag_scheduler:
-        raise HTTPException(status_code=503, detail="DAG scheduler not available")
-    
-    try:
-        return dag_scheduler.get_dag_status(dag_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error getting DAG status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/dags/{dag_id}/run")
-async def trigger_dag(dag_id: str):
-    """Manually trigger a DAG execution"""
-    if not dag_scheduler:
-        raise HTTPException(status_code=503, detail="DAG scheduler not available")
-    
-    try:
-        result = dag_scheduler.run_dag_now(dag_id)
-        return {
-            "message": f"DAG {dag_id} triggered successfully",
-            "run_result": {
-                "status": result["status"],
-                "duration_seconds": result["duration_seconds"],
-                "success_count": result["success_count"],
-                "failed_count": result["failed_count"],
-                "start_time": result["start_time"].isoformat(),
-                "end_time": result["end_time"].isoformat()
+        try:
+            dags_info = []
+            for dag_id in dag_scheduler.dags:
+                dag_status = dag_scheduler.get_dag_status(dag_id)
+                dags_info.append(dag_status)
+            
+            return {
+                "dags": dags_info,
+                "scheduler_running": dag_scheduler.running,
+                "total_dags": len(dag_scheduler.dags)
             }
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error running DAG: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error listing DAGs: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/scheduler/start")
-async def start_scheduler():
-    """Start the DAG scheduler"""
-    if not dag_scheduler:
-        raise HTTPException(status_code=503, detail="DAG scheduler not available")
-    
-    try:
-        dag_scheduler.start()
-        return {"message": "DAG scheduler started", "running": dag_scheduler.running}
-    except Exception as e:
-        logger.error(f"Error starting scheduler: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    @app.get("/dags/{dag_id}/status")
+    async def get_dag_status(dag_id: str):
+        """Get detailed status of a specific DAG"""
+        if not dag_scheduler:
+            raise HTTPException(status_code=503, detail="DAG scheduler not available")
+        
+        try:
+            return dag_scheduler.get_dag_status(dag_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error getting DAG status: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/scheduler/stop")
-async def stop_scheduler():
-    """Stop the DAG scheduler"""
-    if not dag_scheduler:
-        raise HTTPException(status_code=503, detail="DAG scheduler not available")
-    
-    try:
-        dag_scheduler.stop()
-        return {"message": "DAG scheduler stopped", "running": dag_scheduler.running}
-    except Exception as e:
-        logger.error(f"Error stopping scheduler: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    @app.post("/dags/{dag_id}/run")
+    async def trigger_dag(dag_id: str):
+        """Manually trigger a DAG execution"""
+        if not dag_scheduler:
+            raise HTTPException(status_code=503, detail="DAG scheduler not available")
+        
+        try:
+            result = dag_scheduler.run_dag_now(dag_id)
+            return {
+                "message": f"DAG {dag_id} triggered successfully",
+                "run_result": {
+                    "status": result["status"],
+                    "duration_seconds": result["duration_seconds"],
+                    "success_count": result["success_count"],
+                    "failed_count": result["failed_count"],
+                    "start_time": result["start_time"].isoformat(),
+                    "end_time": result["end_time"].isoformat()
+                }
+            }
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error running DAG: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/scheduler/start")
+    async def start_scheduler():
+        """Start the DAG scheduler"""
+        if not dag_scheduler:
+            raise HTTPException(status_code=503, detail="DAG scheduler not available")
+        
+        try:
+            dag_scheduler.start()
+            return {"message": "DAG scheduler started", "running": dag_scheduler.running}
+        except Exception as e:
+            logger.error(f"Error starting scheduler: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/scheduler/stop")
+    async def stop_scheduler():
+        """Stop the DAG scheduler"""
+        if not dag_scheduler:
+            raise HTTPException(status_code=503, detail="DAG scheduler not available")
+        
+        try:
+            dag_scheduler.stop()
+            return {"message": "DAG scheduler stopped", "running": dag_scheduler.running}
+        except Exception as e:
+            logger.error(f"Error stopping scheduler: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+except Exception as e:
+    logger.error(f"Failed to register DAG management endpoints: {e}")
 
 
 if __name__ == "__main__":
