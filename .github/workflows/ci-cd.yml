@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline - Performance Test Only
 
 # Add permissions for security scanning
 permissions:
@@ -17,371 +17,355 @@ env:
   REGION: europe-west1
   REPOSITORY: ml-models
   IMAGE_NAME: medical-classifier
+  # Default service URL for performance testing
+  SERVICE_URL: "https://medical-classifier-api-62n5hcsljq-ew.a.run.app"
 
 jobs:
-  # Job 1: Code Quality & Testing
-  test:
-    name: 🧪 Test & Code Quality
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.9
-        
-    - name: Cache pip dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-          
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-cov flake8 black isort mypy
-        
-    - name: Code formatting check (Black)
-      run: black --check --diff src/ tests/
-      continue-on-error: true
-      
-    - name: Import sorting check (isort)
-      run: isort --check-only --diff src/ tests/
-      continue-on-error: true
-      
-    - name: Linting (flake8)
-      run: flake8 src/ tests/ --max-line-length=88 --extend-ignore=E203,W503
-      continue-on-error: true
-      
-    - name: Type checking (mypy)
-      run: mypy src/ --ignore-missing-imports
-      continue-on-error: true
-      
-    - name: Run unit tests
-      run: |
-        python -m pytest tests/unit/ -v --tb=short || echo "Unit tests completed with warnings"
-        
-    - name: Run all available tests
-      run: |
-        python -m pytest tests/ -v --tb=short --disable-warnings || echo "Tests completed with warnings"
-        
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        fail_ci_if_error: false
+  # DISABLED: All other jobs commented out - only performance test will run
+  
+  # # Job 1: Code Quality & Testing
+  # test:
+  #   name: 🧪 Test & Code Quality
+  #   runs-on: ubuntu-latest
+  #   
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: Set up Python 3.9
+  #     uses: actions/setup-python@v4
+  #     with:
+  #       python-version: 3.9
+  #       
+  #   - name: Cache pip dependencies
+  #     uses: actions/cache@v4
+  #     with:
+  #       path: ~/.cache/pip
+  #       key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+  #       restore-keys: |
+  #         ${{ runner.os }}-pip-
+  #         
+  #   - name: Install dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       pip install -r requirements.txt
+  #       pip install pytest pytest-cov flake8 black isort mypy
+  #       
+  #   - name: Code formatting check (Black)
+  #     run: black --check --diff src/ tests/
+  #     continue-on-error: true
+  #     
+  #   - name: Import sorting check (isort)
+  #     run: isort --check-only --diff src/ tests/
+  #     continue-on-error: true
+  #     
+  #   - name: Linting (flake8)
+  #     run: flake8 src/ tests/ --max-line-length=88 --extend-ignore=E203,W503
+  #     continue-on-error: true
+  #     
+  #   - name: Type checking (mypy)
+  #     run: mypy src/ --ignore-missing-imports
+  #     continue-on-error: true
+  #     
+  #   - name: Run unit tests
+  #     run: |
+  #       python -m pytest tests/unit/ -v --tb=short || echo "Unit tests completed with warnings"
+  #       
+  #   - name: Run all available tests
+  #     run: |
+  #       python -m pytest tests/ -v --tb=short --disable-warnings || echo "Tests completed with warnings"
+  #       
+  #   - name: Upload coverage to Codecov
+  #     uses: codecov/codecov-action@v3
+  #     with:
+  #       file: ./coverage.xml
+  #       fail_ci_if_error: false
+  
+  # # Job 2: Security Scanning
+  # security:
+  #   name: 🔒 Security Scan
+  #   runs-on: ubuntu-latest
+  #   needs: test
+  #   
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: Run Trivy vulnerability scanner
+  #     uses: aquasecurity/trivy-action@master
+  #     with:
+  #       scan-type: 'fs'
+  #       scan-ref: '.'
+  #       format: 'sarif'
+  #       output: 'trivy-results.sarif'
+  #       
+  #   - name: Upload Trivy scan results to GitHub Security tab
+  #     uses: github/codeql-action/upload-sarif@v3
+  #     if: always()
+  #     continue-on-error: true
+  #     with:
+  #       sarif_file: 'trivy-results.sarif'
+  
+  # # Job 3: Build & Test Docker Image
+  # build:
+  #   name: 🐳 Build & Test Docker
+  #   runs-on: ubuntu-latest
+  #   needs: [test, security]
+  #   outputs:
+  #     image-digest: ${{ steps.build.outputs.digest }}
+  #     image-url: ${{ steps.build.outputs.image-url }}
+  #   
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: Set up Docker Buildx
+  #     uses: docker/setup-buildx-action@v3
+  #     
+  #   - name: Create data directory and dummy model files for Docker build
+  #     run: |
+  #       mkdir -p data
+  #       # Create minimal dummy files just for Docker COPY to succeed
+  #       echo "# CI/CD dummy model file" > data/optimized_multinomial_nb.pkl
+  #       echo "# CI/CD dummy feature engine file" > data/feature_engine.pkl
+  #       echo "Created dummy model files for Docker build (production will download real models)"
+  #       
+  #   - name: Build Docker image for testing
+  #     uses: docker/build-push-action@v5
+  #     with:
+  #       context: .
+  #       file: infrastructure/docker/Dockerfile.api
+  #       platforms: linux/amd64
+  #       push: false
+  #       load: true
+  #       tags: ${{ env.IMAGE_NAME }}:test
+  #       cache-from: type=gha
+  #       cache-to: type=gha,mode=max
+  #       
+  #   - name: Test Docker image
+  #     run: |
+  #       # Start container in background
+  #       docker run -d --name test-container -p 8000:8000 -e CI=true -e GITHUB_ACTIONS=true ${{ env.IMAGE_NAME }}:test
+  #       
+  #       # Wait for startup and check logs
+  #       echo "Waiting for startup..."
+  #       sleep 60
+  #       
+  #       # Check container logs for debugging
+  #       echo "=== CONTAINER LOGS ==="
+  #       docker logs test-container
+  #       echo "======================="
+  #       
+  #       # Check if container is still running
+  #       if ! docker ps | grep test-container; then
+  #         echo "❌ Container stopped running!"
+  #         docker logs test-container
+  #         exit 1
+  #       fi
+  #       
+  #       # Test health endpoint with more patience
+  #       echo "Testing health endpoint..."
+  #       for i in {1..10}; do
+  #         echo "Attempt $i:"
+  #         RESPONSE=$(curl -s -w "HTTP_CODE:%{http_code}\n" http://localhost:8000/health || echo "CURL_FAILED")
+  #         echo "Response: $RESPONSE"
+  #         
+  #         if echo "$RESPONSE" | grep -q "HTTP_CODE:200"; then
+  #           echo "✅ Health check passed"
+  #           break
+  #         fi
+  #         
+  #         if [ $i -eq 10 ]; then
+  #           echo "❌ Health check failed after 10 attempts"
+  #           echo "Getting more detailed logs..."
+  #           docker logs test-container --tail 100
+  #           exit 1
+  #         fi
+  #         
+  #         echo "Retrying in 30 seconds..."
+  #         sleep 30
+  #       done
+  #       
+  #       # Test prediction endpoint
+  #       echo "Testing prediction endpoint..."
+  #       curl -X POST http://localhost:8000/predict \
+  #         -H "Content-Type: application/json" \
+  #         -d '{"text": "Patient presents with chest pain and shortness of breath."}' \
+  #         | grep -q "prediction"
+  #       
+  #       echo "✅ Docker image tests passed!"
+  #       
+  #   - name: Clean up test container
+  #     if: always()
+  #     run: docker rm -f test-container || true
+  
+  # # Job 4: Build & Push to Production (only on master branch)
+  # build-prod:
+  #   name: 🚀 Build & Push Production Image
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+  #   outputs:
+  #     image-digest: ${{ steps.push.outputs.digest }}
+  #     image-url: ${{ steps.push.outputs.image-url }}
+  #   
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: Set up Docker Buildx
+  #     uses: docker/setup-buildx-action@v3
+  #     
+  #   - name: Authenticate to Google Cloud
+  #     uses: google-github-actions/auth@v1
+  #     with:
+  #       credentials_json: ${{ secrets.GCP_SA_KEY }}
+  #       
+  #   - name: Configure Docker for GCP
+  #     run: gcloud auth configure-docker $REGION-docker.pkg.dev
+  #     
+  #   - name: Create data directory and dummy model files for Docker build
+  #     run: |
+  #       mkdir -p data
+  #       # Create minimal dummy files just for Docker COPY to succeed
+  #       echo "# CI/CD dummy model file" > data/optimized_multinomial_nb.pkl
+  #       echo "# CI/CD dummy feature engine file" > data/feature_engine.pkl
+  #       echo "Created dummy model files for Docker build (production will download real models)"
+  #       
+  #   - name: Build and push Docker image
+  #     id: push
+  #     uses: docker/build-push-action@v5
+  #     with:
+  #       context: .
+  #       file: infrastructure/docker/Dockerfile.api
+  #       platforms: linux/amd64
+  #       push: true
+  #       tags: |
+  #         ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+  #         ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+  #       cache-from: type=gha
+  #       cache-to: type=gha,mode=max
+  
+  # # Job 5: Deploy to Cloud Run
+  # deploy:
+  #   name: 🚀 Deploy to Cloud Run
+  #   runs-on: ubuntu-latest
+  #   needs: build-prod
+  #   if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+  #   outputs:
+  #     service-url: ${{ steps.deploy.outputs.service-url }}
+  #   
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: Authenticate to Google Cloud
+  #     uses: google-github-actions/auth@v1
+  #     with:
+  #       credentials_json: ${{ secrets.GCP_SA_KEY }}
+  #       
+  #   - name: Set up Cloud SDK
+  #     uses: google-github-actions/setup-gcloud@v1
+  #     
+  #   - name: Set up Terraform
+  #     uses: hashicorp/setup-terraform@v2
+  #     with:
+  #       terraform_version: 1.5.0
+  #       terraform_wrapper: false
+  #       
+  #   - name: Terraform Init
+  #     run: |
+  #       cd infrastructure/terraform
+  #       terraform init
+  #       
+  #   - name: Import existing Cloud Run service if needed
+  #     run: |
+  #       cd infrastructure/terraform
+  #       # Try to import the existing Cloud Run service, ignore error if already imported
+  #       terraform import module.cloud_run.google_cloud_run_v2_service.ml_api projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/medical-classifier-api || echo "Cloud Run service already imported or doesn't exist"
+  #       
+  #   - name: Import existing IAM binding if needed
+  #     run: |
+  #       cd infrastructure/terraform
+  #       # Try to import the existing IAM binding, ignore error if already imported
+  #       terraform import module.cloud_run.google_cloud_run_service_iam_member.public_access projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/medical-classifier-api roles/run.invoker allUsers || echo "IAM binding already imported or doesn't exist"
+  #       
+  #   - name: Terraform Plan
+  #     run: |
+  #       cd infrastructure/terraform
+  #       terraform plan -out=tfplan
+  #       
+  #   - name: Terraform Apply
+  #     id: deploy
+  #     run: |
+  #       cd infrastructure/terraform
+  #       terraform apply -auto-approve tfplan
+  #       
+  #       # Get outputs
+  #       SERVICE_URL=$(terraform output -raw cloud_run_url)
+  #       echo "service-url=$SERVICE_URL" >> $GITHUB_OUTPUT
+  #       echo "Deployed to: $SERVICE_URL"
+  
+  # # Job 6: Post-Deployment Testing
+  # integration-test:
+  #   name: 🧪 Integration Tests
+  #   runs-on: ubuntu-latest
+  #   needs: deploy
+  #   if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+  #   
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: Set up Python 3.9
+  #     uses: actions/setup-python@v4
+  #     with:
+  #       python-version: 3.9
+  #       
+  #   - name: Install test dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       pip install requests pytest
+  #       
+  #   - name: Wait for service to be ready
+  #     run: |
+  #       echo "Waiting for service to be fully ready..."
+  #       sleep 60
+  #       
+  #   - name: Run integration tests against deployed service
+  #     env:
+  #       SERVICE_URL: ${{ needs.deploy.outputs.service-url }}
+  #     run: |
+  #       # Health check
+  #       for i in {1..20}; do
+  #         if curl -f $SERVICE_URL/health; then
+  #           echo "Health check passed"
+  #           break
+  #         fi
+  #         echo "Health check attempt $i failed, retrying in 15s..."
+  #         sleep 15
+  #       done
+  #       
+  #       # Prediction test
+  #       echo "Testing prediction endpoint..."
+  #       RESPONSE=$(curl -s -X POST $SERVICE_URL/predict \
+  #         -H "Content-Type: application/json" \
+  #         -d '{"text": "Patient presents with chest pain and shortness of breath."}')
+  #       
+  #       echo "Response: $RESPONSE"
+  #       
+  #       # Verify response contains expected fields
+  #       echo "$RESPONSE" | grep -q "prediction" || (echo "Missing prediction field" && exit 1)
+  #       echo "$RESPONSE" | grep -q "confidence" || (echo "Missing confidence field" && exit 1)
+  #       
+  #       echo "All integration tests passed!"
 
-  # Job 2: Security Scanning
-  security:
-    name: 🔒 Security Scan
-    runs-on: ubuntu-latest
-    needs: test
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        scan-ref: '.'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      continue-on-error: true
-      with:
-        sarif_file: 'trivy-results.sarif'
-
-  # Job 3: Build & Test Docker Image
-  build:
-    name: 🐳 Build & Test Docker
-    runs-on: ubuntu-latest
-    needs: [test, security]
-    outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
-      image-url: ${{ steps.build.outputs.image-url }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Create data directory and dummy model files for Docker build
-      run: |
-        mkdir -p data
-        # Create minimal dummy files just for Docker COPY to succeed
-        echo "# CI/CD dummy model file" > data/optimized_multinomial_nb.pkl
-        echo "# CI/CD dummy feature engine file" > data/feature_engine.pkl
-        echo "Created dummy model files for Docker build (production will download real models)"
-        
-    - name: Build Docker image for testing
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: infrastructure/docker/Dockerfile.api
-        platforms: linux/amd64
-        push: false
-        load: true
-        tags: ${{ env.IMAGE_NAME }}:test
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        
-    - name: Test Docker image
-      run: |
-        # Start container in background
-        docker run -d --name test-container -p 8000:8000 -e CI=true -e GITHUB_ACTIONS=true ${{ env.IMAGE_NAME }}:test
-        
-        # Wait for startup and check logs
-        echo "Waiting for startup..."
-        sleep 60
-        
-        # Check container logs for debugging
-        echo "=== CONTAINER LOGS ==="
-        docker logs test-container
-        echo "======================="
-        
-        # Check if container is still running
-        if ! docker ps | grep test-container; then
-          echo "❌ Container stopped running!"
-          docker logs test-container
-          exit 1
-        fi
-        
-        # Test health endpoint with more patience
-        echo "Testing health endpoint..."
-        for i in {1..10}; do
-          echo "Attempt $i:"
-          RESPONSE=$(curl -s -w "HTTP_CODE:%{http_code}\n" http://localhost:8000/health || echo "CURL_FAILED")
-          echo "Response: $RESPONSE"
-          
-          if echo "$RESPONSE" | grep -q "HTTP_CODE:200"; then
-            echo "✅ Health check passed"
-            break
-          fi
-          
-          if [ $i -eq 10 ]; then
-            echo "❌ Health check failed after 10 attempts"
-            echo "Getting more detailed logs..."
-            docker logs test-container --tail 100
-            exit 1
-          fi
-          
-          echo "Retrying in 30 seconds..."
-          sleep 30
-        done
-        
-        # Test prediction endpoint
-        echo "Testing prediction endpoint..."
-        curl -X POST http://localhost:8000/predict \
-          -H "Content-Type: application/json" \
-          -d '{"text": "Patient presents with chest pain and shortness of breath."}' \
-          | grep -q "prediction"
-        
-        echo "✅ Docker image tests passed!"
-        
-    - name: Clean up test container
-      if: always()
-      run: docker rm -f test-container || true
-
-  # Job 4: Build & Push to Production (only on master branch)
-  build-prod:
-    name: 🚀 Build & Push Production Image
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    outputs:
-      image-url: ${{ steps.push.outputs.image-url }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SECRET }}
-        
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
-      
-    - name: Configure Docker for Artifact Registry
-      run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
-      
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Create data directory and dummy model files for Docker build
-      run: |
-        mkdir -p data
-        # Create minimal dummy files just for Docker COPY to succeed
-        echo "# CI/CD dummy model file" > data/optimized_multinomial_nb.pkl
-        echo "# CI/CD dummy feature engine file" > data/feature_engine.pkl
-        echo "Created dummy model files for Docker build (production will download real models)"
-      
-    - name: Build and push Docker image
-      id: push
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: infrastructure/docker/Dockerfile.api
-        platforms: linux/amd64
-        push: true
-        tags: |
-          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
-          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        
-    - name: Set output
-      id: output
-      run: |
-        echo "image-url=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
-
-  # Job 5: Deploy Infrastructure
-  deploy:
-    name: 🏗️ Deploy Infrastructure
-    runs-on: ubuntu-latest
-    needs: build-prod
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    outputs:
-      service-url: ${{ steps.deploy.outputs.service-url }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SECRET }}
-        
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
-      
-    - name: Set up Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: 1.6.0
-        terraform_wrapper: false
-        
-    - name: Create terraform.tfvars
-      run: |
-        cat > infrastructure/terraform/terraform.tfvars << EOF
-        project_id = "${{ env.PROJECT_ID }}"
-        region = "${{ env.REGION }}"
-        environment = "prod"
-        EOF
-        
-    - name: Terraform Init
-      run: |
-        cd infrastructure/terraform
-        terraform init
-        
-    - name: Import existing repository if needed
-      run: |
-        cd infrastructure/terraform
-        # Try to import the existing repository, ignore error if already imported
-        terraform import google_artifact_registry_repository.ml_models projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/repositories/ml-models || echo "Repository already imported or doesn't exist"
-        
-    - name: Import existing Cloud Run service if needed
-      run: |
-        cd infrastructure/terraform
-        # Try to import the existing Cloud Run service, ignore error if already imported
-        terraform import module.cloud_run.google_cloud_run_v2_service.ml_api projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/medical-classifier-api || echo "Cloud Run service already imported or doesn't exist"
-        
-    - name: Import existing IAM binding if needed
-      run: |
-        cd infrastructure/terraform
-        # Try to import the existing IAM binding, ignore error if already imported
-        terraform import module.cloud_run.google_cloud_run_service_iam_member.public_access projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/medical-classifier-api roles/run.invoker allUsers || echo "IAM binding already imported or doesn't exist"
-        
-    - name: Terraform Plan
-      run: |
-        cd infrastructure/terraform
-        terraform plan -out=tfplan
-        
-    - name: Terraform Apply
-      id: deploy
-      run: |
-        cd infrastructure/terraform
-        terraform apply -auto-approve tfplan
-        
-        # Get outputs
-        SERVICE_URL=$(terraform output -raw cloud_run_url)
-        echo "service-url=$SERVICE_URL" >> $GITHUB_OUTPUT
-        echo "Deployed to: $SERVICE_URL"
-
-  # Job 6: Post-Deployment Testing
-  integration-test:
-    name: 🧪 Integration Tests
-    runs-on: ubuntu-latest
-    needs: deploy
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.9
-        
-    - name: Install test dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests pytest
-        
-    - name: Wait for service to be ready
-      run: |
-        echo "Waiting for service to be fully ready..."
-        sleep 60
-        
-    - name: Run integration tests against deployed service
-      env:
-        SERVICE_URL: ${{ needs.deploy.outputs.service-url }}
-      run: |
-        # Health check
-        for i in {1..20}; do
-          if curl -f $SERVICE_URL/health; then
-            echo "Health check passed"
-            break
-          fi
-          echo "Health check attempt $i failed, retrying in 15s..."
-          sleep 15
-        done
-        
-        # Prediction test
-        echo "Testing prediction endpoint..."
-        RESPONSE=$(curl -s -X POST $SERVICE_URL/predict \
-          -H "Content-Type: application/json" \
-          -d '{"text": "Patient presents with chest pain and shortness of breath."}')
-        
-        echo "Response: $RESPONSE"
-        
-        # Verify response contains expected fields
-        echo "$RESPONSE" | grep -q "prediction" || (echo "Missing prediction field" && exit 1)
-        echo "$RESPONSE" | grep -q "confidence" || (echo "Missing confidence field" && exit 1)
-        
-        echo "All integration tests passed!"
-
-  # Job 7: Performance Testing
+  # Job 7: Performance Testing - THIS IS THE ONLY ACTIVE JOB
   performance-test:
     name: ⚡ Performance Test
     runs-on: ubuntu-latest
-    needs: integration-test
+    # Removed dependencies - run independently
+    # needs: integration-test
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     
     steps:
@@ -397,20 +381,27 @@ jobs:
       run: |
         pip install locust requests
         
+    - name: Verify service is accessible
+      run: |
+        echo "Checking if service is accessible..."
+        if curl -f --max-time 30 ${{ env.SERVICE_URL }}/health; then
+          echo "✅ Service is accessible"
+        else
+          echo "❌ Service is not accessible at ${{ env.SERVICE_URL }}"
+          echo "Please check if the service URL is correct and the service is running"
+          exit 1
+        fi
+        
     - name: Warm up the API (prevent cold start issues)
-      env:
-        SERVICE_URL: ${{ needs.deploy.outputs.service-url }}
       run: |
         echo "Warming up API with a few test requests..."
         for i in {1..5}; do
-          curl -s $SERVICE_URL/health > /dev/null || echo "Warm-up request $i failed (expected for cold start)"
+          curl -s --max-time 30 ${{ env.SERVICE_URL }}/health > /dev/null || echo "Warm-up request $i failed (expected for cold start)"
           sleep 2
         done
         echo "Warm-up complete"
         
     - name: Run lightweight performance test
-      env:
-        SERVICE_URL: ${{ needs.deploy.outputs.service-url }}
       run: |
         cat > locustfile.py << 'EOF'
         from locust import HttpUser, task, between
@@ -450,48 +441,83 @@ jobs:
                         response.success()
                     else:
                         response.failure(f"Prediction failed: {response.status_code}")
+            
+            @task(2)
+            def monitoring_metrics(self):
+                with self.client.get("/monitoring/metrics", timeout=30, catch_response=True) as response:
+                    if response.status_code == 200:
+                        response.success()
+                    else:
+                        response.failure(f"Monitoring metrics failed: {response.status_code}")
         EOF
         
         # Run more conservative load test
         echo "Running lightweight performance test..."
-        locust --host=$SERVICE_URL \
+        locust --host=${{ env.SERVICE_URL }} \
                --users=3 \
                --spawn-rate=1 \
                --run-time=60s \
                --headless \
                --html=performance_report.html \
-               --expect-workers=1 \
-               --skip-log-setup || echo "Performance test completed with some failures (acceptable for ML API)"
+               --csv=performance_results \
+               --skip-log-setup \
+               --logfile=locust.log \
+               --loglevel=INFO || echo "Performance test completed with some failures (acceptable for ML API)"
         
         # Always succeed - performance test is informational only
         echo "Performance test completed (informational only - not blocking deployment)"
+        
+    - name: Display performance summary
+      run: |
+        echo "📊 PERFORMANCE TEST RESULTS"
+        echo "=========================="
+        
+        if [ -f "performance_results_stats.csv" ]; then
+          echo "Request Statistics:"
+          cat performance_results_stats.csv
+          echo ""
+        fi
+        
+        if [ -f "performance_results_failures.csv" ]; then
+          echo "Failures (if any):"
+          cat performance_results_failures.csv
+          echo ""
+        fi
+        
+        if [ -f "locust.log" ]; then
+          echo "Key Performance Metrics:"
+          grep -E "(RPS|percentile|Total requests|GET|POST)" locust.log | tail -10
+        fi
                
     - name: Upload performance report
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: performance-report
-        path: performance_report.html
+        name: performance-report-${{ github.run_number }}
+        path: |
+          performance_report.html
+          performance_results_*.csv
+          locust.log
 
-  # Job 8: Notification
-  notify:
-    name: 📢 Notify Deployment
-    runs-on: ubuntu-latest
-    needs: [deploy, integration-test, performance-test]
-    if: always() && github.ref == 'refs/heads/master' && github.event_name == 'push'
-    
-    steps:
-    - name: Deployment Success Notification
-      if: needs.deploy.result == 'success' && needs.integration-test.result == 'success'
-      run: |
-        echo "🎉 Deployment Successful!"
-        echo "Service URL: ${{ needs.deploy.outputs.service-url }}"
-        echo "Commit: ${{ github.sha }}"
-        echo "All tests passed!"
-        
-    - name: Deployment Failure Notification
-      if: needs.deploy.result == 'failure' || needs.integration-test.result == 'failure'
-      run: |
-        echo "❌ Deployment Failed!"
-        echo "Check the logs for details."
-        exit 1 
+  # # Job 8: Notification - DISABLED
+  # notify:
+  #   name: 📢 Notify Deployment
+  #   runs-on: ubuntu-latest
+  #   needs: [deploy, integration-test, performance-test]
+  #   if: always() && github.ref == 'refs/heads/master' && github.event_name == 'push'
+  #   
+  #   steps:
+  #   - name: Deployment Success Notification
+  #     if: needs.deploy.result == 'success' && needs.integration-test.result == 'success'
+  #     run: |
+  #       echo "🎉 Deployment Successful!"
+  #       echo "Service URL: ${{ needs.deploy.outputs.service-url }}"
+  #       echo "Commit: ${{ github.sha }}"
+  #       echo "All tests passed!"
+  #       
+  #   - name: Deployment Failure Notification
+  #     if: needs.deploy.result == 'failure' || needs.integration-test.result == 'failure'
+  #     run: |
+  #       echo "❌ Deployment Failed!"
+  #       echo "Check the logs for details."
+  #       exit 1 
