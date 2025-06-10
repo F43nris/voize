@@ -28,6 +28,28 @@ except ImportError:
     GCS_AVAILABLE = False
     print("⚠️  Google Cloud Storage client not available - using local files only")
 
+# Add DAG scheduler imports and setup
+try:
+    from pathlib import Path
+    
+    # Add the data-pipeline directory to Python path
+    data_pipeline_path = str(Path(__file__).parent.parent.parent / "data-pipeline")
+    if data_pipeline_path not in sys.path:
+        sys.path.append(data_pipeline_path)
+    
+    from ml_dags import setup_ml_scheduler
+    from dag_scheduler import DAGScheduler
+    
+    # Initialize the scheduler (will be setup during startup)
+    dag_scheduler = None
+    DAG_SCHEDULER_AVAILABLE = True
+    logger.info("🔄 DAG scheduler modules loaded")
+    
+except ImportError as e:
+    logger.warning(f"DAG scheduler not available: {e}")
+    dag_scheduler = None
+    DAG_SCHEDULER_AVAILABLE = False
+
 # Monkey patch for pickle deserialization - make the class available 
 # in the module namespace that pickle expects
 sys.modules["__main__"].MedicalTextFeatureEngine = MedicalTextFeatureEngine
@@ -460,37 +482,33 @@ def load_model():
 
 @app.on_event("startup")
 async def startup_event():
-    """Load model on startup with detailed logging"""
-    startup_time = time.time() - startup_start_time
-    logger.info("🚀 FastAPI STARTUP EVENT TRIGGERED")
-    logger.info(f"Time since import: {startup_time:.2f} seconds")
+    """Initialize the model and monitoring systems on startup"""
+    global model, feature_engine, startup_start_time, dag_scheduler
     
-    logger.info("📊 System information:")
-    import psutil
-
-    try:
-        memory_info = psutil.virtual_memory()
-        logger.info(f"  Available memory: {memory_info.available / (1024**3):.2f} GB")
-        logger.info(f"  Total memory: {memory_info.total / (1024**3):.2f} GB")
-        logger.info(f"  Memory usage: {memory_info.percent}%")
-        
-        cpu_count = psutil.cpu_count()
-        cpu_percent = psutil.cpu_percent(interval=1)
-        logger.info(f"  CPU cores: {cpu_count}")
-        logger.info(f"  CPU usage: {cpu_percent}%")
-    except ImportError:
-        logger.warning("psutil not available - cannot show system info")
-    except Exception as e:
-        logger.warning(f"Error getting system info: {e}")
+    startup_start_time = time.time()
     
-    logger.info("🔄 Starting model loading from startup event...")
-    success = load_model()
+    logger.info("🚀 Starting up Medical Classifier API...")
     
-    if success:
-        logger.info("✅ STARTUP COMPLETED SUCCESSFULLY!")
+    # Download and load models
+    if download_models_from_cloud():
+        load_model()
+    
+    # Initialize DAG scheduler if available
+    if DAG_SCHEDULER_AVAILABLE:
+        try:
+            dag_scheduler = setup_ml_scheduler()
+            logger.info("🔄 DAG scheduler initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize DAG scheduler: {e}")
+            dag_scheduler = None
+    
+    startup_duration = time.time() - startup_start_time
+    logger.info(f"✅ Startup completed in {startup_duration:.2f} seconds")
+    
+    if model is not None and feature_engine is not None:
+        logger.info("🎯 API ready to serve predictions!")
     else:
-        logger.error("❌ STARTUP FAILED - Model loading unsuccessful")
-        # Don't exit here - let health checks handle the failure
+        logger.warning("⚠️  API started but model/feature engine not loaded")
 
 
 @app.get("/health", response_model=HealthResponse)
